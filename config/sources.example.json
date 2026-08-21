@@ -1,0 +1,30 @@
+{
+  "sources": [
+    "~/code/my-project",
+    "~/Documents/reports"
+  ],
+  "authors": [
+    "Your Name",
+    "you@example.com"
+  ],
+  "since": null,
+  "budget_tokens": 120000,
+  "pack_tokens": 25000,
+  "excerpt_cap": 3000,
+  "keep_pii_reversible": true,
+  "pseudonymize_git_identities": true,
+  "sensitive_terms": [
+    {
+      "term": "Acme Corp",
+      "label": "ORG"
+    },
+    {
+      "term": "北极星计划",
+      "label": "PROJECT"
+    }
+  ],
+  "allowlist": [
+    "example.com",
+    "localhost"
+  ]
+}

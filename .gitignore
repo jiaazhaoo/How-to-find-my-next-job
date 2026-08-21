@@ -1,0 +1,14 @@
+# The workspace holds redacted excerpts, the alias vault and your cards.
+# None of it belongs in git -- the vault least of all.
+workspace/
+*.tmp
+
+# Your real config names clients and project code names. Only the example
+# file is tracked.
+config/sources.json
+
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.DS_Store
