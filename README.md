@@ -47,6 +47,10 @@ python -m career answers --file answers.jsonl
 python -m career profile               # ⑦ 骨架：什么能写进画像
 # /profile 写正文
 python -m career profile --check workspace/09_profile.md
+
+# 想知道这一切有多可复现：
+/reliability-check                     # 在干净上下文里跑 N 次 deep-read
+python -m career reliability workspace/rel/run*.jsonl
 ```
 
 单文件临时用：
@@ -103,6 +107,8 @@ workspace/
 
 - **凭据明文永不落盘。** vault 里存的是 PII 的映射，凭据只留 fingerprint。
 - **没有引用就没有主张。** `verify` 会把编造的卡片抓出来（fixture 里试过）。
+- **可追溯不等于可复现。** `career reliability` 把最大的未知变成一个数字；
+  各次运行不能看见彼此，否则测的是记忆不是信度。
 - **说过两遍不等于有佐证。** 一个主题要成为 pattern，至少要有一张**有工件支撑**的卡片——
   否则推文里说一遍、访谈里再说一遍，就能自我认证。
 - **不做人格推断。** claim 里出现"内向/性格/MBTI"直接判校验失败。LLM 从文本推断大五人格
@@ -121,6 +127,8 @@ workspace/
 | ② 深读 → 证据卡片 | 已完成 |
 | ⑥ 因人而异的提问 | 已完成，10 类候选 + CCI 角度 + 三重配额 → [`docs/profile-and-interview.md`](docs/profile-and-interview.md) |
 | ⑤ 画像 | 已完成，骨架 + 强制引用 + 四段结构，`--check` 机器校验 |
+| 信度测量 | 已完成，`career reliability` + `/reliability-check`；5 个指标 + 受控对照 |
+| 行业趋势对照 | 未开始，调研见对话记录（O*NET / Anthropic Economic Index / Lightcast） |
 | 量表（RIASEC / IPIP-NEO） | 未开始，且只会用你亲自填的结果，不从材料推断 |
 
 ```bash

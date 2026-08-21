@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import cards as cards_mod
 from . import interview as interview_mod
+from . import reliability as reliability_mod
 from . import profile as profile_mod
 from . import pipeline, triage
 from .config import DEFAULT_CONFIG_PATH, Config, write_template
@@ -555,6 +556,63 @@ def cmd_profile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reliability(args: argparse.Namespace) -> int:
+    cfg = Config.load(Path(args.config))
+    paths = [Path(p) for p in args.runs]
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        for p in missing:
+            print(f"missing: {p}")
+        return 1
+    if len(paths) < 2:
+        print("需要至少 2 次独立运行。见 `reliability-check` skill——"
+              "关键是每次必须在干净上下文里跑，否则测的是记忆不是信度。")
+        return 1
+
+    runs = reliability_mod.load_runs(paths)
+    report = reliability_mod.analyse(runs, now_year=args.year)
+    out = cfg.ws / "10_reliability.json"
+    reliability_mod.dump(report, out)
+
+    def line(name: str, value: float, band: str, detail: str = "") -> None:
+        bar = "#" * int(round(value * 20))
+        print(f"  {name:12} {value:5.1%} {bar:<20} [{band}] {detail}")
+
+    print(f"独立运行        : {report.runs} 次，每次卡片数 {report.cards_per_run}\n")
+    print("一致性（原始重合率，未做机会校正——见下方说明）")
+    line("引用段落", report.evidence["mean"], report.evidence["band"],
+         f"两两 Jaccard，最低 {report.evidence['min']:.1%}")
+    line("主张", report.claims["stable_fraction"], report.claims["band"],
+         f"{report.claims['distinct_claims']} 条不同主张，"
+         f"{report.claims['in_one_run_only']} 条只出现过一次")
+    line("技能标签", report.skills["mean"], report.skills["band"],
+         f"每次 {report.skills['labels_per_run']} 个标签")
+    line("主题(pattern)", report.themes["mean"], report.themes["band"],
+         f"每次 {report.themes['patterns_per_run']} 个")
+    line("最终问题", report.questions["mean"], report.questions["band"],
+         f"每次 {report.questions['questions_per_run']} 个")
+
+    r = report.ratings
+    print(f"\n评分变异（{r['matched_claims']} 条被多次找到的主张）")
+    print(f"  difficulty 同主张平均相差 {r['difficulty_spread_mean']:.2f} 级，"
+          f"其中相差 ≥2 级的有 {r['difficulty_disagreements_ge_2']} 条")
+    print(f"  confidence 同主张平均相差 {r['confidence_spread_mean']:.2f}")
+
+    for note in report.notes:
+        print(f"\n  ! {note}")
+
+    print(f"\n怎么读这些数字")
+    print(f"  · 这些是原始重合率，**没有做机会校正**。kappa 一类的统计量需要一个")
+    print(f"    「所有可能卡片」的全集，而这里的全集是「模型可能写出的任何句子」，")
+    print(f"    不存在。所以真实一致性只会比上面低，不会更高。")
+    print(f"  · 从下往上读更有用：卡片层抖动是可以容忍的，只要**问题层**稳定——")
+    print(f"    因为问题才是你实际看到的东西。两者背离说明聚合在吸收噪音（好事）。")
+    print(f"  · 分档（stable/usable/shaky/unreliable）是我为这个工具定的惯例，")
+    print(f"    不是任何领域标准。")
+    print(f"\nwrote {out}")
+    return 0
+
+
 def cmd_restore(args: argparse.Namespace) -> int:
     cfg = Config.load(Path(args.config))
     vault = Vault.load(cfg.vault_path)
@@ -665,6 +723,13 @@ def build_parser() -> argparse.ArgumentParser:
                        help="stage 5: what may be claimed, and check what was written")
     s.add_argument("--check", metavar="FILE", help="validate a written profile")
     s.set_defaults(func=cmd_profile)
+
+    s = sub.add_parser("reliability", parents=[common],
+                       help="measure whether repeated deep-read runs agree")
+    s.add_argument("runs", nargs="+", metavar="CARDS.jsonl",
+                   help="card files from independent runs (2+)")
+    s.add_argument("--year", type=int)
+    s.set_defaults(func=cmd_reliability)
 
     s = sub.add_parser("redact", parents=[common], help="redact one file or stdin")
     s.add_argument("file")
