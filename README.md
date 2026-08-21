@@ -15,8 +15,9 @@ Align what you have done with the tide of the times.
 无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。命令是 `python3`，不是 `python`。
 
 ```bash
-python -m career init                 # 自动探测身份、会话日志、已下载的导出
-$EDITOR config/sources.json           # 只需补两项：sources 和 sensitive_terms
+python -m career init                 # 自动探测身份、你提交过的仓库、会话日志、已下载的导出
+python -m career repos                # 看它凭什么把这些仓库算成你的（每行都是 git 的计数）
+$EDITOR config/sources.json           # 只需补一项：sensitive_terms（客户名/项目代号）
 python -m career doctor               # 检查脱敏工具链和配置
 
 python -m career connectors           # 看有哪些可导入的源
@@ -75,8 +76,9 @@ workspace/
 | Codex 会话 | 同上。只导一个助手会让语料偏向你恰好在那个工具里做的事 | ✅ |
 | Notion 导出 | 项目文档和会议记录，常常是一个项目唯一的书面记录 | ✅ 导出自动探测，或用 `import-notion` skill 走 MCP |
 | X 归档 | 面向受众的写作 = 兴趣与定位；自我复述的长贴按线程重组 | ✅ 导出自动探测（X API 已改按次计费，导出更划算） |
-| 个人博客 | 无报酬写作 = 强兴趣信号 | 待做 |
+| 个人博客 / 任何公开地址 | 无报酬写作 = 强兴趣信号 | ✅ `web` 连接器，填链接即可；页面声明了 feed 会自动跟过去 |
 | LinkedIn 导出 | 别人写的推荐 + 职位时间脊柱（**不当能力证据**） | 待做 |
+| 本地 git 仓库 | 哪些是"你的"由 `git shortlog` 测量，不由模型判断 | ✅ 自动发现 |
 | GitHub MCP | 你写在**别人 PR 上的 review 评论**——本地 clone 一条都没有 | 待做 |
 | 日历 | 你到底把时间花在哪了 | 待做 |
 

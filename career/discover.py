@@ -11,6 +11,7 @@ count as "your work" is a judgement, not a fact on disk.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 SEARCH_DIRS = ["~/Downloads", "~/Desktop", "~/Documents", "."]
@@ -93,3 +94,115 @@ def detect_sources(config_connectors: dict | None = None) -> dict:
         out["connectors"][name] = {"ready": ok, "note": note,
                                    "discovered_path": conf.get("path")}
     return out
+
+
+# --------------------------------------------------------------------------
+# Repository discovery.
+#
+# "Which repositories are mine" reads like a judgement call, and it is not:
+# git recorded the answer at the time. Every commit carries an author, so
+# authorship is a measurement. An agent guessing from repository names would
+# be strictly worse than counting -- it would miss the fork you did all your
+# work in and confidently claim the tutorial you cloned once.
+#
+# What is left over genuinely does need a person: whether work you did under
+# a different identity counts, and whether a repo you contributed two commits
+# to belongs in your professional story.
+# --------------------------------------------------------------------------
+REPO_SEARCH_DIRS = ["~/code", "~/dev", "~/develop", "~/Developer", "~/projects", "~/src",
+                    "~/repos", "~/work", "~/git", "~/Documents", "~/Desktop", "~"]
+
+SKIP_WALK = {"node_modules", "vendor", ".venv", "venv", "Library", "Applications",
+             ".Trash", ".cache", "go", ".rustup", ".cargo", "site-packages", ".git"}
+
+
+@dataclass
+class RepoInfo:
+    path: str
+    name: str
+    my_commits: int
+    total_commits: int
+    my_share: float
+    last_mine: str
+    last_any: str
+    authors: int
+
+    @property
+    def is_mine(self) -> bool:
+        return self.my_commits > 0
+
+
+def _find_git_dirs(root: Path, max_depth: int, budget: list[int]) -> list[Path]:
+    found: list[Path] = []
+    stack = [(root, 0)]
+    while stack and budget[0] > 0:
+        current, depth = stack.pop()
+        budget[0] -= 1
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            continue
+        if any(e.name == ".git" for e in entries):
+            found.append(current)
+            continue          # do not descend into a repo looking for more
+        if depth >= max_depth:
+            continue
+        for e in entries:
+            if e.is_dir() and not e.is_symlink() and e.name not in SKIP_WALK \
+                    and not e.name.startswith("."):
+                stack.append((e, depth + 1))
+    return found
+
+
+def repo_authorship(repo: Path, identity: list[str]) -> RepoInfo | None:
+    """Count commits by author. One `git shortlog` pass per repo."""
+    out = _git("shortlog", "-sne", "--all", "--no-merges", cwd=repo)
+    if not out:
+        return None
+    import re
+    mine = {i.strip().lower() for i in identity if i.strip()}
+    my_commits = total = authors = 0
+    for line in out.splitlines():
+        m = re.match(r"\s*(\d+)\s+(.*?)\s+<(.+?)>", line)
+        if not m:
+            continue
+        count, name, email = int(m.group(1)), m.group(2).lower(), m.group(3).lower()
+        total += count
+        authors += 1
+        if any(token == name or token == email for token in mine):
+            my_commits += count
+    if not total:
+        return None
+    return RepoInfo(
+        path=str(repo), name=repo.name, my_commits=my_commits, total_commits=total,
+        my_share=round(my_commits / total, 3), authors=authors,
+        last_mine=_git("log", "-1", "--format=%aI",
+                       *[f"--author={i}" for i in identity[:1]], cwd=repo)[:10],
+        last_any=_git("log", "-1", "--format=%aI", cwd=repo)[:10],
+    )
+
+
+def find_repos(hints: list[str] | None = None, identity: list[str] | None = None,
+               max_depth: int = 3, scan_budget: int = 4000) -> list[RepoInfo]:
+    """Every git repo you have actually committed to, most-yours first."""
+    identity = identity or git_identity()
+    budget = [scan_budget]
+    seen: set[Path] = set()
+    repos: list[RepoInfo] = []
+    for raw in (hints or REPO_SEARCH_DIRS):
+        base = Path(raw).expanduser()
+        if not base.is_dir():
+            continue
+        # "~" last and shallow: it is the catch-all, not a place to spend the budget
+        depth = 1 if base == Path.home() else max_depth
+        for repo in _find_git_dirs(base, depth, budget):
+            resolved = repo.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            info = repo_authorship(repo, identity)
+            if info and info.is_mine:
+                repos.append(info)
+    repos.sort(key=lambda r: (-r.my_commits, r.last_mine), reverse=False)
+    repos.sort(key=lambda r: (r.my_commits, r.last_mine), reverse=True)
+    return repos

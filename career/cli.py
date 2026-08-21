@@ -10,6 +10,7 @@ from pathlib import Path
 from . import cards as cards_mod
 from . import pipeline, triage
 from .config import DEFAULT_CONFIG_PATH, Config, write_template
+from .discover import find_repos, git_identity
 from .redact import Redactor, Vault, capability_report
 
 
@@ -34,6 +35,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     template = json.loads(json.dumps(TEMPLATE))   # deep copy
     if found["identity"]:
         template["authors"] = found["identity"]
+
+    repos = find_repos(identity=found["identity"]) if found["identity"] else []
+    keep = [r for r in repos if r.my_commits >= args.min_commits][:args.max_repos]
+    if keep:
+        template["sources"] = [r.path for r in keep]
     for name, info in found["connectors"].items():
         if info.get("discovered_path"):
             template["connectors"].setdefault(name, {})["path"] = info["discovered_path"]
@@ -52,12 +58,67 @@ def cmd_init(args: argparse.Namespace) -> int:
         extra = f"   (found {info['discovered_path']})" if info.get("discovered_path") else ""
         print(f"  {name:14}: {mark}{extra}")
 
-    print("\nOnly two things still need you:\n"
-          "  1. `sources` -- which repos and folders count as your work "
-          "(nothing on disk can tell us that)\n"
-          "  2. `sensitive_terms` -- client and project code names "
-          "(no scanner knows these are secret)\n"
+    if keep:
+        print(f"\n  sources      : {len(keep)} repo(s) you have committed to")
+        for r in keep[:12]:
+            print(f"      {r.my_commits:5} commits  {r.my_share:.0%} yours  "
+                  f"last {r.last_mine or '?':10}  {r.path}")
+        if len(keep) > 12:
+            print(f"      ... and {len(keep) - 12} more, all written to the config")
+        if len(repos) > len(keep):
+            print(f"      ({len(repos) - len(keep)} more had fewer than "
+                  f"{args.min_commits} commits from you -- see `career repos`)")
+    else:
+        print("\n  sources      : no repos found with commits from you -- "
+              "add paths by hand, or check `authors`")
+
+    print("\nOne thing still needs you, because it is not a fact on disk:\n"
+          "  `sensitive_terms` -- client and project code names. "
+          "No scanner knows these are confidential.\n"
+          "\nAlso worth a look: `career repos` shows every repo it found and why.\n"
           "\nThen: python -m career doctor")
+    return 0
+
+
+def cmd_repos(args: argparse.Namespace) -> int:
+    """Show the authorship evidence behind `sources`.
+
+    Deliberately not a judgement call by a model: every line here is a count
+    git recorded at the time, so you can disagree with a number rather than
+    with an opinion.
+    """
+    try:
+        cfg = Config.load(Path(args.config))
+        identity = cfg.authors
+        configured = {str(Path(p).expanduser().resolve()) for p in cfg.sources}
+    except (FileNotFoundError, ValueError):
+        identity, configured = git_identity(), set()
+
+    if not identity:
+        print("no git identity -- set `git config user.name/user.email` or fill in `authors`")
+        return 1
+
+    repos = find_repos(identity=identity, hints=args.search or None)
+    if not repos:
+        print(f"no repositories with commits by {', '.join(identity)}")
+        return 1
+
+    print(f"repositories with commits by {', '.join(identity)}\n")
+    print(f"  {'commits':>8} {'yours':>6} {'authors':>7}  {'last':10}  path")
+    for r in repos:
+        mark = "*" if str(Path(r.path).resolve()) in configured else " "
+        if r.my_commits < args.min_commits:
+            mark = "-"
+        print(f"{mark} {r.my_commits:8} {r.my_share:6.0%} {r.authors:7}  "
+              f"{r.last_mine or '?':10}  {r.path}")
+    print("\n  * already in `sources`   - below --min-commits")
+
+    if args.write:
+        keep = [r.path for r in repos if r.my_commits >= args.min_commits]
+        data = json.loads(Path(args.config).read_text("utf-8"))
+        data["sources"] = keep
+        Path(args.config).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        print(f"\nwrote {len(keep)} path(s) to `sources` in {args.config}")
     return 0
 
 
@@ -157,6 +218,8 @@ def cmd_connect(args: argparse.Namespace) -> int:
     items = connector.fetch(conf, limit=args.limit)
     if not items:
         print(f"{args.connector}: nothing met the import threshold ({note})")
+        for problem in getattr(connector, "problems", [])[:10]:
+            print(f"  {problem}")
         return 1
     out, n = write_items(cfg.ws, args.connector, items, clean=not args.append)
     print(f"{args.connector}: staged {n} item(s) -> {out}")
@@ -185,6 +248,13 @@ def cmd_connect(args: argparse.Namespace) -> int:
     skipped = getattr(connector, "last_skipped", 0)
     if skipped:
         print(f"  below cutoff  : {skipped} item(s) scored under min_relevance")
+    problems = getattr(connector, "problems", None)
+    if problems:
+        print(f"  notes         :")
+        for note in problems[:10]:
+            print(f"      {note}")
+        if len(problems) > 10:
+            print(f"      ... and {len(problems) - 10} more")
     hist = getattr(connector, "last_histogram", None)
     if hist:
         print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in hist.items()))
@@ -393,7 +463,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("init", parents=[common], help="write a config template")
     s.add_argument("--force", action="store_true")
+    s.add_argument("--min-commits", type=int, default=3,
+                   help="how many commits of yours make a repo count (default 3)")
+    s.add_argument("--max-repos", type=int, default=40)
     s.set_defaults(func=cmd_init)
+
+    s = sub.add_parser("repos", parents=[common],
+                       help="show every git repo you have committed to, and why")
+    s.add_argument("--min-commits", type=int, default=3)
+    s.add_argument("--search", action="append", help="extra directory to search (repeatable)")
+    s.add_argument("--write", action="store_true", help="write the result into `sources`")
+    s.set_defaults(func=cmd_repos)
 
     s = sub.add_parser("doctor", parents=[common], help="check redaction tooling and config")
     s.set_defaults(func=cmd_doctor)

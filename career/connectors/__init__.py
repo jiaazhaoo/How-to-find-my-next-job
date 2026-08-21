@@ -6,12 +6,14 @@ from .base import Connector, StagedItem, read_provenance, source_type_of, stagin
 from .claude_code import ClaudeCodeConnector
 from .codex import CodexConnector
 from .notion_export import NotionExportConnector
+from .web import WebConnector
 from .x_archive import XArchiveConnector
 
 REGISTRY: dict[str, Connector] = {c.name: c for c in (
     ClaudeCodeConnector(),
     CodexConnector(),
     NotionExportConnector(),
+    WebConnector(),
     XArchiveConnector(),
 )}
 

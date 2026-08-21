@@ -46,6 +46,12 @@
       "enabled": true,
       "path": null,
       "min_relevance": 0.35
+    },
+    "web": {
+      "enabled": true,
+      "urls": [],
+      "min_relevance": 0.35,
+      "limit": 200
     }
   },
   "topic_policy": {

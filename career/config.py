@@ -28,7 +28,8 @@ TEMPLATE = {
         "claude-code": {"enabled": True, "min_human_chars": 200},
         "codex": {"enabled": True, "min_human_chars": 200},
         "notion-export": {"enabled": True, "path": None, "min_relevance": 0.35},
-        "x-archive": {"enabled": True, "path": None, "min_relevance": 0.35}
+        "x-archive": {"enabled": True, "path": None, "min_relevance": 0.35},
+        "web": {"enabled": True, "urls": [], "min_relevance": 0.35, "limit": 200}
     },
     "topic_policy": {
         "enabled_for": ["chat", "notes", "public"],
