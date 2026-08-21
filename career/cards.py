@@ -247,16 +247,33 @@ def cluster(cards: list[Card], threshold: float = 0.3) -> list[Theme]:
     for g in groups:
         sources = sorted({e.source for c in g for e in c.evidence})
         skills = sorted({s for c in g for s in c.skills})
-        # Independence is what earns "pattern": two quotes from one file is
-        # still one observation. And a theme made only of things you said
-        # about yourself is never a pattern, however often you said it --
-        # repetition of a self-description is not corroboration.
-        if all(c.kind in SELF_REPORT_KINDS for c in g):
+        # Independence is what earns "pattern", and it has to be independence
+        # *of the person*. Two quotes from one file is one observation. So is
+        # a claim you made on a timeline and then repeated in the interview:
+        # two sources by the count, one witness in fact. A pattern therefore
+        # needs at least one card backed by an artifact -- something that
+        # existed before anyone asked -- plus a second independent source.
+        # Without that rule, anything said twice certifies itself.
+        artifact_backed = [c for c in g if c.kind not in SELF_REPORT_KINDS
+                           and not all(e.source == "interview" for e in c.evidence)]
+        if not artifact_backed:
             status = "self-report"
         else:
             status = "pattern" if len(sources) >= 2 else "anecdote"
         strength = round(sum(c.confidence for c in g) * (1 + 0.5 * (len(sources) - 1)), 3)
-        label = max(g, key=lambda c: (c.confidence, len(c.claim))).claim
+        # Name the theme after demonstrated work. A self-report or an
+        # interview answer can be the most confident card in the group and
+        # still be the wrong title: "I would rather not do migrations" is not
+        # a name for the migration work itself, and that heading would carry
+        # straight into the written profile.
+        # Precedence: artifact-backed evidence, then testimony, then anything.
+        # An interview answer is a real independent source, but it is still
+        # someone describing the work rather than the work itself.
+        evidence = [c for c in g if c.kind in ("capability", "decision", "impact")]
+        from_artifacts = [c for c in evidence
+                          if not all(e.source == "interview" for e in c.evidence)]
+        titling = from_artifacts or evidence or g
+        label = max(titling, key=lambda c: (c.confidence, len(c.claim))).claim
         themes.append(Theme(label=label, cards=g, skills=skills, sources=sources,
                             status=status, strength=strength))
     return sorted(themes, key=lambda t: -t.strength)

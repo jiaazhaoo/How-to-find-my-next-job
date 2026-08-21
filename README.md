@@ -40,6 +40,13 @@ python -m career prep -v              # ②③ 脱敏 + 打分 + 选择 + 生成
 ```bash
 python -m career verify               # ④ 每条引用必须真实存在于模型看过的摘录里
 python -m career themes               # ⑤ 聚类：≥2 个独立来源才算 pattern；输出矛盾点
+
+python -m career questions --year 2026 # ⑥ 从卡片图里挖出该问你什么
+# /interview 逐个问 → answers.jsonl
+python -m career answers --file answers.jsonl
+python -m career profile               # ⑦ 骨架：什么能写进画像
+# /profile 写正文
+python -m career profile --check workspace/09_profile.md
 ```
 
 单文件临时用：
@@ -62,6 +69,10 @@ workspace/
   04_packs/pack-NN.md     交给模型的 read pack
   05_cards.jsonl          证据卡片（模型写）
   06_themes.json          聚类结果 + 矛盾点
+  07_questions.json       为你生成的问题 + 依据
+  07_answers.jsonl        你的回答（会变成新卡片）
+  08_skeleton.json        什么可以写进画像
+  09_profile.md           画像正文（--check 校验）
   redaction-report.json   脱敏统计（不含明文，可分享）
 ```
 
@@ -92,6 +103,8 @@ workspace/
 
 - **凭据明文永不落盘。** vault 里存的是 PII 的映射，凭据只留 fingerprint。
 - **没有引用就没有主张。** `verify` 会把编造的卡片抓出来（fixture 里试过）。
+- **说过两遍不等于有佐证。** 一个主题要成为 pattern，至少要有一张**有工件支撑**的卡片——
+  否则推文里说一遍、访谈里再说一遍，就能自我认证。
 - **不做人格推断。** claim 里出现"内向/性格/MBTI"直接判校验失败。LLM 从文本推断大五人格
   与真实量表的相关系数低于 r≈0.30；特质只能来自你亲自填的量表，不能来自模型读你的代码。
 - **不让自我描述变成能力证据。** 也包括推文里你自己宣称的成果——没有工件支撑的结果是 `self_concept`，
@@ -106,8 +119,9 @@ workspace/
 | ⓪ 连接器 / 输入源 | 4 个已完成（见上表） |
 | ① 脱敏 | 已完成（含聊天记录的主题切除策略） |
 | ② 深读 → 证据卡片 | 已完成 |
-| ③ 画像（只用 pattern 写） | 未开始 |
-| ④ 因人而异的提问（Savickas CCI / RIASEC / IPIP-NEO） | 未开始，原料已经在 `themes` 的 tensions 和卡片的 `open_question` 里 |
+| ⑥ 因人而异的提问 | 已完成，10 类候选 + CCI 角度 + 三重配额 → [`docs/profile-and-interview.md`](docs/profile-and-interview.md) |
+| ⑤ 画像 | 已完成，骨架 + 强制引用 + 四段结构，`--check` 机器校验 |
+| 量表（RIASEC / IPIP-NEO） | 未开始，且只会用你亲自填的结果，不从材料推断 |
 
 ```bash
 python -m career selftest

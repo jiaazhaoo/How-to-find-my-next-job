@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from . import cards as cards_mod
+from . import interview as interview_mod
+from . import profile as profile_mod
 from . import pipeline, triage
 from .config import DEFAULT_CONFIG_PATH, Config, write_template
 from .discover import find_repos, git_identity
@@ -420,6 +422,139 @@ def cmd_themes(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_graph(cfg: Config, cards_path: Path | None = None):
+    """Cards plus themes, with quotes verified where the corpus is available."""
+    path = cards_path or cfg.cards_path
+    cards = cards_mod.load(path, strict=False)
+    if cfg.corpus_path.exists():
+        corpus = json.loads(cfg.corpus_path.read_text("utf-8"))
+        # Interview answers verify against the answer file, not the corpus.
+        corpus.setdefault("interview", "")
+        if cfg.answers_path.exists():
+            corpus["interview"] = cfg.answers_path.read_text("utf-8")
+        cards_mod.verify_quotes(cards, corpus)
+    return cards, cards_mod.cluster(cards)
+
+
+def cmd_questions(args: argparse.Namespace) -> int:
+    cfg = Config.load(Path(args.config))
+    if not cfg.cards_path.exists():
+        print("no cards yet; run the `deep-read` skill first")
+        return 1
+    cards, themes = _load_graph(cfg)
+    candidates = interview_mod.generate(cards, themes, now_year=args.year)
+    if not candidates:
+        print("no questions generated -- the record has no gaps or contradictions "
+              "to ask about, which usually means too few cards")
+        return 1
+    chosen = interview_mod.rank(candidates, limit=args.limit)
+    interview_mod.dump(chosen, cfg.questions_path,
+                       extra={"considered": len(candidates)})
+
+    print(f"considered      : {len(candidates)} candidate(s)")
+    print(f"selected        : {len(chosen)}\n")
+    for i, c in enumerate(chosen, 1):
+        print(f"{i}. [{c.kind}  w={c.weight:.1f}]  {c.subject}")
+        print(f"   记录显示 : {c.observation}")
+        print(f"   能解决   : {c.resolves}")
+        print(f"   角度     : {interview_mod.CCI_ANGLES.get(c.angle, c.angle)}")
+        print(f"   草稿     : {c.draft}")
+        print(f"   依据卡片 : {', '.join(c.card_ids) or '-'}\n")
+    cov = interview_mod.coverage(chosen)
+    print(f"coverage        : {cov['kinds']}")
+    if cov["missing_angles"]:
+        print(f"  angles unused : {', '.join(cov['missing_angles'])}")
+    print(f"\nwrote {cfg.questions_path}")
+    print("Next: run the `interview` skill to ask these properly, then "
+          "`career answers --file <answers.jsonl>`")
+    return 0
+
+
+def cmd_answers(args: argparse.Namespace) -> int:
+    """Fold interview answers back in as cards from an independent source."""
+    cfg = Config.load(Path(args.config))
+    raw = sys.stdin.read() if args.file == "-" else Path(args.file).read_text("utf-8")
+    records = []
+    for line in raw.splitlines():
+        if line.strip():
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                print(f"skipping unparseable line: {line[:60]}")
+    new_cards = interview_mod.answers_to_cards(records)
+    if not new_cards:
+        print("no answers to record")
+        return 1
+
+    with cfg.answers_path.open("a", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    existing = cards_mod.load(cfg.cards_path, strict=False) if cfg.cards_path.exists() else []
+    known = {c.id for c in existing}
+    added = [c for c in new_cards if c.id not in known]
+    cards_mod.dump(existing + added, cfg.cards_path)
+
+    print(f"recorded        : {len(records)} answer(s)")
+    print(f"new cards       : {len(added)}")
+    promoted = [t for t in cards_mod.cluster(existing + added)
+                if t.status == "pattern" and any(
+                    e.source == "interview" for c in t.cards for e in c.evidence)]
+    if promoted:
+        print(f"\n你的回答让 {len(promoted)} 个主题获得了独立佐证：")
+        for t in promoted[:5]:
+            print(f"  - {t.label[:60]}")
+    print(f"\nNext: python -m career profile")
+    return 0
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    cfg = Config.load(Path(args.config))
+    cards, themes = _load_graph(cfg)
+
+    if args.check:
+        target = Path(args.check)
+        if not target.exists():
+            print(f"{target} not found")
+            return 1
+        skeleton = profile_mod.build_skeleton(cards, themes)
+        problems = profile_mod.validate(target.read_text("utf-8"), cards, skeleton)
+        errors = [p for p in problems if p.severity == "error"]
+        for p in problems:
+            print(f"  {p.severity:7} [{p.where}] {p.message}")
+        print(f"\n{len(errors)} error(s), {len(problems) - len(errors)} warning(s)")
+        if not problems:
+            print("画像的每一条断言都挂在证据上。")
+        return 0 if not errors else 2
+
+    skeleton = profile_mod.build_skeleton(cards, themes)
+    profile_mod.dump_skeleton(skeleton, cfg.skeleton_path)
+    st = skeleton.stats
+    if st["quote_check_ran"]:
+        print(f"cards           : {st['cards']}  "
+              f"({st['verified']} 引用已核对, {st['failed']} 未通过)")
+    else:
+        print(f"cards           : {st['cards']}  "
+              f"(引用未核对——找不到 {cfg.corpus_path.name}，先跑 prep)")
+    print(f"可以写进画像的   : {st['patterns']} 个主题  "
+          f"（{st['citable_ids']} 张卡片可被引用）")
+    print(f"只能标为单一来源 : {st['anecdotes']}")
+    print(f"只能标为自述     : {st['self_reports']}\n")
+    for e in skeleton.qualified[:12]:
+        print(f"  * [{e.strength:5.2f}] {e.label[:60]}")
+        print(f"      skills={','.join(e.skills[:5])}  sources={e.sources}  "
+              f"roles={','.join(e.role_signals)}  max_difficulty={e.difficulty_max}")
+        for stance in e.stance[:2]:
+            print(f"      本人表态: {stance[:64]}")
+    if skeleton.gaps:
+        print(f"\n记录读不出来的（必须写进画像）: {len(skeleton.gaps)}")
+        for g in skeleton.gaps[:6]:
+            print(f"  ? {g[:70]}")
+    print(f"\nwrote {cfg.skeleton_path}")
+    print("Next: run the `profile` skill to write it, then "
+          "`career profile --check workspace/09_profile.md`")
+    return 0
+
+
 def cmd_restore(args: argparse.Namespace) -> int:
     cfg = Config.load(Path(args.config))
     vault = Vault.load(cfg.vault_path)
@@ -514,6 +649,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--cards")
     s.add_argument("--verified-only", action="store_true")
     s.set_defaults(func=cmd_themes)
+
+    s = sub.add_parser("questions", parents=[common],
+                       help="stage 6: mine the card graph for what to ask you")
+    s.add_argument("--limit", type=int, default=7)
+    s.add_argument("--year", type=int, help="current year, for dormant-skill detection")
+    s.set_defaults(func=cmd_questions)
+
+    s = sub.add_parser("answers", parents=[common],
+                       help="fold interview answers back in as cards")
+    s.add_argument("--file", default="-")
+    s.set_defaults(func=cmd_answers)
+
+    s = sub.add_parser("profile", parents=[common],
+                       help="stage 5: what may be claimed, and check what was written")
+    s.add_argument("--check", metavar="FILE", help="validate a written profile")
+    s.set_defaults(func=cmd_profile)
 
     s = sub.add_parser("redact", parents=[common], help="redact one file or stdin")
     s.add_argument("file")

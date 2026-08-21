@@ -132,6 +132,22 @@ class Config:
         return self.ws / "06_themes.json"
 
     @property
+    def questions_path(self) -> Path:
+        return self.ws / "07_questions.json"
+
+    @property
+    def answers_path(self) -> Path:
+        return self.ws / "07_answers.jsonl"
+
+    @property
+    def skeleton_path(self) -> Path:
+        return self.ws / "08_skeleton.json"
+
+    @property
+    def profile_path(self) -> Path:
+        return self.ws / "09_profile.md"
+
+    @property
     def redaction_report_path(self) -> Path:
         return self.ws / "redaction-report.json"
 
