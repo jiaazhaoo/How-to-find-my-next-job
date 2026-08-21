@@ -73,6 +73,7 @@ class Document:
     kind: str = "text"          # text | rich | code
     extract: str = "pending"    # ok | pending | unsupported | error
     chars: int = 0
+    source_type: str = "file"    # "file" for disk material, else the connector's type
     repo: str | None = None
     authored_by_me: bool | None = None
     my_line_share: float | None = None
@@ -186,6 +187,21 @@ def extract_text(path: Path) -> tuple[str, str]:
 
 
 # -- git awareness ----------------------------------------------------------
+def staged_source_type(path: Path) -> str:
+    """Imported material carries its connector's type; disk material is "file".
+
+    Downstream this drives a separate budget quota, because a year of chat
+    logs would otherwise outweigh every repository put together.
+    """
+    from .connectors import REGISTRY, source_type_of
+
+    connector = source_type_of(path)
+    if connector == "file":
+        return "file"
+    known = REGISTRY.get(connector)
+    return known.source_type if known else connector
+
+
 def repo_root(path: Path) -> Path | None:
     cur = path if path.is_dir() else path.parent
     for candidate in [cur, *cur.parents]:
@@ -304,6 +320,7 @@ def scan(roots: list[Path], authors: list[str], since: str | None = None,
                 mtime=path.stat().st_mtime,
                 kind="rich" if ext in RICH_EXT else ("code" if ext not in
                      {".md", ".txt", ".rst", ".adoc", ".org", ".tex"} else "text"),
+                source_type=staged_source_type(path),
             )
             if rr:
                 doc.repo = rr.name

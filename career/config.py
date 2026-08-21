@@ -23,6 +23,15 @@ TEMPLATE = {
         {"term": "北极星计划", "label": "PROJECT"},
     ],
     "allowlist": ["example.com", "localhost"],
+    "per_source_share": 0.35,
+    "connectors": {
+        "claude-code": {"enabled": True, "min_human_chars": 200}
+    },
+    "topic_policy": {
+        "enabled_for": ["chat"],
+        "drop_ratio": 0.5,
+        "extra_topics": {}
+    },
 }
 
 
@@ -38,6 +47,9 @@ class Config:
     pseudonymize_git_identities: bool = True
     sensitive_terms: list[dict] = field(default_factory=list)
     allowlist: list[str] = field(default_factory=list)
+    per_source_share: float = 0.35
+    connectors: dict = field(default_factory=dict)
+    topic_policy: dict = field(default_factory=dict)
     workspace: str = str(DEFAULT_WORKSPACE)
 
     @classmethod
@@ -61,6 +73,31 @@ class Config:
     @property
     def ws(self) -> Path:
         return Path(self.workspace)
+
+    @property
+    def staging_root(self) -> Path:
+        from .connectors.base import STAGING_DIRNAME
+        return self.ws / STAGING_DIRNAME
+
+    @property
+    def scan_roots(self) -> list[Path]:
+        """Disk sources plus whatever connectors have already staged.
+
+        Staged material is just files by the time `scan` sees it -- that is
+        the entire point of the connector contract.
+        """
+        staged = sorted(d for d in self.staging_root.glob("*") if d.is_dir()) \
+            if self.staging_root.exists() else []
+        return self.roots + staged
+
+    def topics(self) -> dict | None:
+        from .redact import DEFAULT_TOPICS
+        extra = (self.topic_policy or {}).get("extra_topics") or {}
+        return {**DEFAULT_TOPICS, **extra} if extra else None
+
+    def topic_applies_to(self, source_type: str) -> bool:
+        enabled = (self.topic_policy or {}).get("enabled_for", ["chat"])
+        return source_type in enabled
 
     @property
     def vault_path(self) -> Path:

@@ -31,7 +31,22 @@ KINDS = {
     "interest",       # what you gravitate towards unprompted
     "constraint",     # context that limited you (team, org, legacy)
     "contradiction",  # evidence that conflicts with another card
+    "self_concept",   # what you said about yourself -- see below
 }
+
+# `self_concept` exists to defuse the worst failure mode of importing chat
+# logs: you have described yourself to an assistant many times, and if those
+# sentences are read as capability evidence the profile becomes your own
+# self-image handed back to you with citations attached. It looks rigorous and
+# it is a mirror.
+#
+# So a statement you made about yourself is evidence of *self-concept* and
+# nothing else. It never counts towards a capability pattern. It is, however,
+# genuinely useful downstream: self-concept is exactly what narrative career
+# interviewing (Savickas' role-model question) sets out to elicit, and the gap
+# between what you say about yourself and what the artifacts show is the
+# sharpest question generator in the whole system.
+SELF_REPORT_KINDS = {"self_concept"}
 ROLE_SIGNALS = {"owner", "contributor", "reviewer", "observer", "unknown"}
 
 # Cards describe *behaviour with receipts*. Trait language is out of scope at
@@ -93,8 +108,11 @@ def validate(card: Card) -> list[str]:
         errs.append(f"role_signal must be one of {sorted(ROLE_SIGNALS)}")
     if len(card.claim.strip()) < 12:
         errs.append("claim too short to be checkable")
-    if TRAIT_WORDS.search(card.claim):
-        errs.append("claim uses personality-trait language; keep cards behavioural")
+    # Trait words are banned as *inference* but permitted as *quotation*: a
+    # self_concept card reports what the person said, it does not assert it.
+    if card.kind not in SELF_REPORT_KINDS and TRAIT_WORDS.search(card.claim):
+        errs.append("claim uses personality-trait language; keep cards behavioural "
+                    "(if this is quoting the person about themselves, use kind=self_concept)")
     if not card.evidence:
         errs.append("no evidence attached")
     for i, e in enumerate(card.evidence):
@@ -230,8 +248,13 @@ def cluster(cards: list[Card], threshold: float = 0.3) -> list[Theme]:
         sources = sorted({e.source for c in g for e in c.evidence})
         skills = sorted({s for c in g for s in c.skills})
         # Independence is what earns "pattern": two quotes from one file is
-        # still one observation.
-        status = "pattern" if len(sources) >= 2 else "anecdote"
+        # still one observation. And a theme made only of things you said
+        # about yourself is never a pattern, however often you said it --
+        # repetition of a self-description is not corroboration.
+        if all(c.kind in SELF_REPORT_KINDS for c in g):
+            status = "self-report"
+        else:
+            status = "pattern" if len(sources) >= 2 else "anecdote"
         strength = round(sum(c.confidence for c in g) * (1 + 0.5 * (len(sources) - 1)), 3)
         label = max(g, key=lambda c: (c.confidence, len(c.claim))).claim
         themes.append(Theme(label=label, cards=g, skills=skills, sources=sources,

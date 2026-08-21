@@ -75,7 +75,7 @@ Fields:
 | field | rule |
 |---|---|
 | `claim` | One sentence, behavioural, checkable. Same language as the source. |
-| `kind` | `capability` · `decision` · `impact` · `collaboration` · `interest` · `constraint` · `contradiction` |
+| `kind` | `capability` · `decision` · `impact` · `collaboration` · `interest` · `constraint` · `contradiction` · `self_concept` |
 | `evidence` | ≥1 item. `source` = the `id` from the SOURCE header. `quote` = **verbatim** from the pack, ≤200 chars. `locator` = section/heading/line hint. |
 | `skills` | Short lowercase labels. Reuse labels across cards — clustering depends on it. |
 | `role_signal` | `owner` · `contributor` · `reviewer` · `observer` · `unknown`. Derive from `my_line_share`/`commits`, not from tone. |
@@ -84,12 +84,53 @@ Fields:
 | `counter_evidence` | What would make this claim wrong, if anything in the pack suggests it. |
 | `open_question` | The one thing you would have to ask the person to settle this. This field feeds the interview layer — a good question here is worth more than three extra cards. |
 
+## Reading a chat session (`class=chat_session`)
+
+Session transcripts are the richest source in the corpus and the easiest to
+misread. A repository records what shipped; a transcript records what was
+*tried* — abandoned approaches, the questions someone had to ask, the places
+they argued back. None of that survives into a commit, and all of it is
+evidence.
+
+Five rules specific to transcripts:
+
+1. **Only `## you` blocks are evidence.** Assistant turns are stubs, present
+   so the human turns make sense. Quoting the assistant and attributing it to
+   the person is the single most likely mistake here, and it produces a card
+   that is wrong in the most flattering possible direction.
+2. **The self-flattery trap.** People describe themselves to assistants
+   constantly — "我一般习惯先…", "I'm not great at…". Read as capability
+   evidence, these turn the profile into the person's own self-image handed
+   back with citations: rigorous-looking, and a mirror. Any statement someone
+   makes *about themselves* is `kind: "self_concept"`, never `capability`.
+   Self-concept cards can quote trait language (that is what was said); they
+   can never be promoted to a pattern, however often they recur. They are
+   valuable as interview fuel: the **gap between the self-description and what
+   the artifacts show** is the best question generator in the system.
+3. **Pushback is the competence signal.** Where someone corrects, overrides or
+   argues with the model, they are demonstrating domain knowledge — you cannot
+   argue about a field you do not understand. Long stretches of "yes, do that"
+   demonstrate nothing. The header gives you a `pushback=` count; the turns
+   themselves tell you what it was about.
+4. **Abandoned work counts.** "We tried X, it didn't hold up because Y" is a
+   `decision` card even though nothing shipped. This is the one place such
+   evidence exists.
+5. **`<!-- block removed by topic policy: … -->`** means a turn was excised for
+   containing health, money, legal or personal material. Note the gap, never
+   speculate about its content, and never treat surrounding turns as a
+   continuous conversation.
+
+One more: a session where the person typed very little and the assistant did
+everything is weak evidence about the person, whatever got built. Check
+`human_turns` and `human_weight` in the header before writing an `owner` card.
+
 ## Hard rules
 
 1. **Never invent a quote.** If you cannot quote it, you cannot claim it.
 2. **No personality inference.** "Careful", "introverted", "perfectionist",
    "MBTI/Big Five anything" — banned at this layer, and the validator rejects
-   them. LLM personality inference from text correlates below r≈0.3 with
+   them. (The one exception is a `self_concept` card, where you are quoting
+   the person's own words about themselves rather than concluding anything.) LLM personality inference from text correlates below r≈0.3 with
    actual instruments; behaviour with receipts is what this stage produces.
    Traits, if they ever appear, come from a real instrument the person fills
    in, not from you reading their code.

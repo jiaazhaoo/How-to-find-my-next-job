@@ -52,7 +52,17 @@ cannot catch:
 Add every one you find to `sensitive_terms` in the config, then re-run `prep`.
 Aliases are stable, so re-running is cheap and idempotent.
 
-**4. Check the vault is where it should be.** `workspace/vault/aliases.json`
+**4. For chat material, check the topic policy.** `topic_excisions` and
+`excised_blocks` in the summary count turns removed for health, money, legal
+or personal content, and `failures[]` lists sessions dropped because most of
+their turns hit. Two failure directions, both worth catching by eye: a
+legaltech engineer's work turns being excised as "legal" (add nothing — narrow
+`topic_policy.extra_topics` or drop the category), and a personal turn that
+slipped through because it used words the patterns do not know. The policy is
+turn-level on purpose: one doctor's appointment should not cost you a good
+session, but it must still be visibly removed rather than quietly kept.
+
+**5. Check the vault is where it should be.** `workspace/vault/aliases.json`
 maps aliases back to real names and must be mode 0600 and gitignored. It is
 the one file in the workspace that is *more* sensitive than the originals,
 because it is the whole cast list in one place. Never commit it, never upload

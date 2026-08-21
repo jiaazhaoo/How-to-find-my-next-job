@@ -26,5 +26,19 @@
   "allowlist": [
     "example.com",
     "localhost"
-  ]
+  ],
+  "per_source_share": 0.35,
+  "connectors": {
+    "claude-code": {
+      "enabled": true,
+      "min_human_chars": 200
+    }
+  },
+  "topic_policy": {
+    "enabled_for": [
+      "chat"
+    ],
+    "drop_ratio": 0.5,
+    "extra_topics": {}
+  }
 }

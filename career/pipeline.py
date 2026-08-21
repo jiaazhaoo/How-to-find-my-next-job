@@ -8,7 +8,8 @@ from pathlib import Path
 from . import ingest, triage
 from .config import Config
 from .ingest import Document
-from .redact import Redactor, RedactionError, Vault, gitleaks_literals
+from .redact import (Redactor, RedactionError, Vault, excise_topics,
+                     gitleaks_literals, secret_flood)
 
 
 def build_redactor(cfg: Config) -> Redactor:
@@ -43,7 +44,7 @@ def build_redactor(cfg: Config) -> Redactor:
 
 
 def run_scan(cfg: Config) -> tuple[list[Document], dict]:
-    docs, stats = ingest.scan(cfg.roots, cfg.authors, since=cfg.since)
+    docs, stats = ingest.scan(cfg.scan_roots, cfg.authors, since=cfg.since)
     ingest.write_manifest(docs, cfg.manifest_path)
     (cfg.ws / "stats.json").write_text(
         json.dumps(stats, ensure_ascii=False, indent=2), "utf-8")
@@ -66,6 +67,8 @@ def run_prep(cfg: Config, use_gitleaks: bool = True, verbose: bool = False) -> d
     scored: list[triage.Scored] = []
     reports: list[dict] = []
     failures: list[dict] = []
+    topic_stats: dict[str, int] = {}
+    excised_blocks = 0
     by_id: dict[str, Document] = {d.id: d for d in docs}
 
     for doc in docs:
@@ -82,6 +85,20 @@ def run_prep(cfg: Config, use_gitleaks: bool = True, verbose: bool = False) -> d
             # enter the corpus.
             failures.append({"path": doc.path, "reason": f"redaction:{exc}"})
             continue
+        flood = secret_flood(report)
+        if flood:
+            failures.append({"path": doc.path, "reason": flood})
+            continue
+        if cfg.topic_applies_to(doc.source_type):
+            outcome = excise_topics(redacted, cfg.topics(),
+                                    float((cfg.topic_policy or {}).get("drop_ratio", 0.5)))
+            for name, n in outcome.topics.items():
+                topic_stats[name] = topic_stats.get(name, 0) + n
+            if outcome.dropped:
+                failures.append({"path": doc.path, "reason": outcome.drop_reason})
+                continue
+            redacted = outcome.text
+            excised_blocks += outcome.excised_blocks
         reports.append(report.to_dict())
         (red_dir / f"{doc.id}.txt").write_text(redacted, "utf-8")
         s = triage.score_document(doc, redacted)
@@ -93,7 +110,8 @@ def run_prep(cfg: Config, use_gitleaks: bool = True, verbose: bool = False) -> d
         if verbose:
             print(f"  {s.score:6.2f} {s.artifact_class:16} {s.path}")
 
-    scored = triage.select(scored, cfg.budget_tokens, excerpt_cap=cfg.excerpt_cap)
+    scored = triage.select(scored, cfg.budget_tokens, excerpt_cap=cfg.excerpt_cap,
+                           per_source_share=cfg.per_source_share)
     triage.to_jsonl(scored, cfg.shortlist_path)
 
     corpus: dict[str, str] = {}
@@ -113,9 +131,12 @@ def run_prep(cfg: Config, use_gitleaks: bool = True, verbose: bool = False) -> d
     summary["extract_failures"] = failures[:50]
     summary["extract_failure_count"] = len(failures)
     summary["external_secret_literals"] = len(external)
+    summary["topic_excisions"] = topic_stats
+    summary["excised_blocks"] = excised_blocks
     summary["redaction_totals"] = _totals(reports)
     cfg.redaction_report_path.write_text(
         json.dumps({"documents": reports, "totals": summary["redaction_totals"],
+                    "topic_excisions": topic_stats, "excised_blocks": excised_blocks,
                     "failures": failures}, ensure_ascii=False, indent=2), "utf-8")
     (cfg.ws / "prep-summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), "utf-8")

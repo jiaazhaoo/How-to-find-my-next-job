@@ -259,9 +259,94 @@ def capability_report() -> dict:
         presidio = True
     except Exception:
         presidio = False
+    pdf = "pdftotext" if shutil.which("pdftotext") else ""
+    if not pdf:
+        for mod in ("pypdf", "PyPDF2"):
+            try:
+                __import__(mod)
+                pdf = mod
+                break
+            except ImportError:
+                continue
     return {
         "builtin_rules": len(rules.ALL_RULES),
+        "pdf": pdf,
         "gitleaks": bool(shutil.which("gitleaks")),
         "trufflehog": bool(shutil.which("trufflehog")),
         "presidio": presidio,
     }
+
+
+# --------------------------------------------------------------------------
+# Topic policy. Chat logs are a different risk class from repositories: they
+# contain whatever you happened to be dealing with that week -- health, money,
+# a lawyer, someone else's problem pasted in. Pattern-based PII redaction does
+# nothing about a paragraph that is simply none of a career profile's
+# business, because there is no identifier in it to redact.
+#
+# So chats get a second policy on top of the gate: excise the offending
+# *block*, not the whole document. A session that mentions a doctor's
+# appointment in one turn is still good evidence in its other twenty.
+# --------------------------------------------------------------------------
+DEFAULT_TOPICS: dict[str, str] = {
+    "health": r"(?:医院|就诊|确诊|病历|化验|手术|抑郁|焦虑症|吃药|处方|体检报告)"
+              r"|\b(?:diagnos\w+|prescription|therapist|antidepress\w+|medical record|"
+              r"mental health|sick leave)\b",
+    "money": r"(?:年薪|月薪|薪资|工资条|存款|房贷|贷款|征信|股票账户|期权数量|offer 金额)"
+             r"|\b(?:my salary|base salary|total comp|equity grant|mortgage|my savings|"
+             r"bank account)\b",
+    "legal": r"(?:律师|诉讼|仲裁|竞业限制|离职补偿|劳动仲裁)"
+             r"|\b(?:lawsuit|litigation|settlement agreement|non-compete|my lawyer)\b",
+    "personal": r"(?:女朋友|男朋友|离婚|相亲|婚姻|家里人生病|吵架)"
+                r"|\b(?:my girlfriend|my boyfriend|my marriage|divorce|my therapist)\b",
+}
+
+BLOCK_SPLIT = re.compile(r"(?m)^(?=## )")
+
+
+@dataclass
+class TopicOutcome:
+    text: str
+    excised_blocks: int = 0
+    total_blocks: int = 0
+    topics: dict[str, int] = field(default_factory=dict)
+    dropped: bool = False
+    drop_reason: str = ""
+
+
+def excise_topics(text: str, topics: dict[str, str] | None = None,
+                  drop_ratio: float = 0.5) -> TopicOutcome:
+    """Remove blocks that hit a sensitive topic; drop the document if most do.
+
+    Blocks are chat turns when the text is a transcript, paragraphs otherwise.
+    Excisions leave a visible marker: the model must know material was removed,
+    or it will read the remaining turns as a complete conversation.
+    """
+    patterns = {name: re.compile(p, re.I) for name, p in (topics or DEFAULT_TOPICS).items()}
+    blocks = BLOCK_SPLIT.split(text) if "\n## " in text else text.split("\n\n")
+    joiner = "" if "\n## " in text else "\n\n"
+
+    kept, hits, excised = [], {}, 0
+    for block in blocks:
+        matched = [name for name, pat in patterns.items() if pat.search(block)]
+        if matched:
+            for name in matched:
+                hits[name] = hits.get(name, 0) + 1
+            excised += 1
+            kept.append(f"<!-- block removed by topic policy: {','.join(sorted(matched))} -->\n")
+            continue
+        kept.append(block)
+
+    out = TopicOutcome(text=joiner.join(kept), excised_blocks=excised,
+                       total_blocks=len(blocks), topics=hits)
+    if blocks and excised / len(blocks) >= drop_ratio:
+        out.dropped = True
+        out.drop_reason = f"topics:{','.join(sorted(hits))} ({excised}/{len(blocks)} blocks)"
+    return out
+
+
+def secret_flood(report: RedactionReport, threshold: int = 20) -> str | None:
+    """A document that is mostly credentials is a key dump, not a work sample."""
+    if report.secret_count >= threshold:
+        return f"secret-flood:{report.secret_count} credentials in one document"
+    return None

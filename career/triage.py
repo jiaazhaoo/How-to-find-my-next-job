@@ -81,7 +81,46 @@ def estimate_tokens(text: str) -> int:
     return int(cjk / 1.5 + (len(text) - cjk) / 4) + 1
 
 
+CHAT_MARKER = re.compile(r"<!--\s*source_type=chat\b")
+CHAT_META = re.compile(r"(\w+)=([\w./-]+)")
+HUMAN_TURN = re.compile(r"^## you(?: ·.*)?$", re.M)
+
+
+def is_chat(text: str) -> bool:
+    return bool(CHAT_MARKER.search(text[:400]))
+
+
+def chat_meta(text: str) -> dict:
+    """Read the metrics the connector already computed, from the staged header."""
+    head = text[:800]
+    m = CHAT_MARKER.search(head)
+    if not m:
+        return {}
+    block = head[m.start():head.find("-->", m.start())]
+    out: dict[str, str | int] = {}
+    for key, value in CHAT_META.findall(block):
+        out[key] = int(value) if value.isdigit() else value
+    return out
+
+
+def human_turns(text: str) -> str:
+    """Only what the person actually typed.
+
+    Scoring a transcript as a whole would mostly score the assistant's prose,
+    which says nothing about the person. The same applies to evidence: the
+    model's words in a session are never evidence about its user.
+    """
+    parts, spans = [], [m.start() for m in HUMAN_TURN.finditer(text)]
+    for start in spans:
+        body = text[text.index("\n", start) + 1:]
+        nxt = re.search(r"^## ", body, re.M)
+        parts.append(body[:nxt.start()] if nxt else body)
+    return "\n".join(parts)
+
+
 def classify(doc: Document) -> tuple[str, float]:
+    if doc.source_type == "chat":
+        return "chat_session", 2.2
     path = doc.path.replace("\\", "/")
     for name, pattern, weight in CLASS_PATTERNS:
         if pattern.search(path):
@@ -97,12 +136,60 @@ class Scored:
     artifact_class: str
     score: float
     est_tokens: int
+    source_type: str = "file"
     reasons: list[str] = field(default_factory=list)
     selected: bool = False
     excerpt_strategy: str = "full"
 
 
+def score_chat(doc: Document, text: str) -> Scored:
+    """Chat transcripts need their own scorer.
+
+    Decision-marker density -- the signal that works for documents -- mostly
+    measures the assistant here. What distinguishes a session worth reading is
+    how much of *you* is in it: long turns, sustained threads, and above all
+    pushback. You cannot argue with a model about a domain you do not know,
+    so correction density is the cheapest competence signal in the corpus.
+    """
+    meta = chat_meta(text)
+    mine = human_turns(text)
+    reasons = ["class=chat_session(x2.2)"]
+    score = 2.2
+
+    # Weighted length keeps the scorer language-neutral (see the connector).
+    chars = int(meta.get("human_weight") or meta.get("human_chars") or len(mine))
+    turns = int(meta.get("human_turns") or 1)
+    pushback = int(meta.get("pushback") or len(DECISION_MARKERS.findall(mine)))
+    teaching = int(meta.get("teaching") or 0)
+
+    for label, shown, value, weight, cap in (
+            ("pushback", pushback, pushback, 0.30, 2.0),
+            ("teaching", teaching, teaching, 0.25, 1.5),
+            ("depth", turns, turns, 0.15, 1.0),
+            ("your_words", chars, chars / 1000, 0.60, 2.0)):
+        if value > 0:
+            bump = min(cap, value * weight)
+            score += bump
+            reasons.append(f"{label}={shown}(+{bump:.2f})")
+
+    decisions = len(DECISION_MARKERS.findall(mine))
+    if decisions:
+        bump = min(1.5, decisions * 0.2)
+        score += bump
+        reasons.append(f"decisions={decisions}(+{bump:.2f})")
+
+    if chars < 500 and int(meta.get("tool_calls") or 0) > 40:
+        score -= 1.0
+        reasons.append("watched-not-worked(-1.00)")
+
+    return Scored(doc_id=doc.id, path=doc.path, repo=meta.get("repo") or doc.repo,
+                  artifact_class="chat_session", score=round(score, 3),
+                  est_tokens=estimate_tokens(text), source_type="chat", reasons=reasons)
+
+
 def score_document(doc: Document, text: str) -> Scored:
+    if doc.source_type == "chat" or is_chat(text):
+        return score_chat(doc, text)
     cls, base = classify(doc)
     reasons = [f"class={cls}(x{base})"]
     score = base
@@ -144,7 +231,8 @@ def score_document(doc: Document, text: str) -> Scored:
         reasons.append("stub(-0.60)")
 
     return Scored(doc_id=doc.id, path=doc.path, repo=doc.repo, artifact_class=cls,
-                  score=round(score, 3), est_tokens=estimate_tokens(text), reasons=reasons)
+                  score=round(score, 3), est_tokens=estimate_tokens(text),
+                  source_type=doc.source_type, reasons=reasons)
 
 
 # -- structural excerpting --------------------------------------------------
@@ -152,6 +240,8 @@ def excerpt(text: str, budget_tokens: int, context: int = 2) -> tuple[str, str]:
     """Reduce ``text`` to its load-bearing lines. Returns (text, strategy)."""
     if estimate_tokens(text) <= budget_tokens:
         return text, "full"
+    if is_chat(text):
+        return _excerpt_chat(text, budget_tokens)
 
     lines = text.splitlines()
     keep: set[int] = set(range(min(12, len(lines))))          # the opening always matters
@@ -194,15 +284,55 @@ def excerpt(text: str, budget_tokens: int, context: int = 2) -> tuple[str, str]:
     return "\n".join(out), "structural"
 
 
+def _excerpt_chat(text: str, budget_tokens: int) -> tuple[str, str]:
+    """Never truncate a human turn; spend the whole budget on them.
+
+    Assistant stubs go first, and if the person's own turns still overflow,
+    the longest ones win -- a long turn is where someone explains themselves.
+    """
+    # Everything before the first human turn is preamble: the title and the
+    # connector's metrics block. Cutting at the first "-->" would keep only
+    # the title comment and silently drop pushback/human_weight -- the very
+    # fields the reading contract tells the model to check.
+    first = HUMAN_TURN.search(text)
+    header = text[:first.start()].rstrip() if first else ""
+    used = estimate_tokens(header)
+    blocks: list[tuple[int, str]] = []
+    for m in HUMAN_TURN.finditer(text):
+        body = text[m.start():]
+        nxt = re.search(r"^## ", body[1:], re.M)
+        chunk = body[:nxt.start() + 1] if nxt else body
+        blocks.append((estimate_tokens(chunk), chunk.rstrip()))
+
+    keep, dropped = [], 0
+    for cost, chunk in sorted(blocks, key=lambda b: -b[0]):
+        if used + cost > budget_tokens:
+            dropped += 1
+            continue
+        used += cost
+        keep.append(chunk)
+    order = {chunk: i for i, (_, chunk) in enumerate(blocks)}
+    keep.sort(key=lambda c: order.get(c, 0))
+    note = (f"\n\n<!-- assistant turns removed; {dropped} shorter human turn(s) "
+            f"dropped to fit budget -->") if dropped else "\n\n<!-- assistant turns removed -->"
+    return header + note + "\n" + "\n\n".join(keep), "chat-human-only"
+
+
 # -- budgeted, stratified selection ----------------------------------------
 def select(scored: list[Scored], budget_tokens: int, per_repo_share: float = 0.4,
-           per_class_share: float = 0.45, excerpt_cap: int = 3000) -> list[Scored]:
+           per_class_share: float = 0.45, excerpt_cap: int = 3000,
+           per_source_share: float = 0.35) -> list[Scored]:
     """Greedy by score, held back by diversity quotas.
 
     ``per_repo_share`` caps how much of the budget any single repository may
     consume; ``per_class_share`` does the same per artifact class. Without
     these, a monorepo with 300 markdown files silently becomes your entire
     professional identity.
+
+    ``per_source_share`` is the same argument one level up, and it is the one
+    that matters once connectors are in play: a year of chat logs outweighs
+    every repository put together by sheer volume, and without a cap the
+    portrait becomes "a person who talks to AI a lot".
     """
     scored = sorted(scored, key=lambda s: s.score, reverse=True)
     repo_cap = budget_tokens * per_repo_share
@@ -210,6 +340,9 @@ def select(scored: list[Scored], budget_tokens: int, per_repo_share: float = 0.4
     # A quota only makes sense when there is something to balance against.
     multi_repo = len({s.repo or "_loose" for s in scored}) > 1
     multi_class = len({s.artifact_class for s in scored}) > 1
+    multi_source = len({s.source_type for s in scored}) > 1
+    source_cap = budget_tokens * per_source_share
+    by_source: dict[str, float] = {}
     used = 0.0
     by_repo: dict[str, float] = {}
     by_class: dict[str, float] = {}
@@ -228,10 +361,15 @@ def select(scored: list[Scored], budget_tokens: int, per_repo_share: float = 0.4
         if multi_class and by_class.get(ck, 0) + cost > class_cap:
             s.reasons.append("skipped:class-quota")
             continue
+        sk = s.source_type
+        if multi_source and by_source.get(sk, 0) + cost > source_cap:
+            s.reasons.append("skipped:source-quota")
+            continue
         s.selected = True
         used += cost
         by_repo[rk] = by_repo.get(rk, 0) + cost
         by_class[ck] = by_class.get(ck, 0) + cost
+        by_source[sk] = by_source.get(sk, 0) + cost
 
     # Quotas can leave budget on the table. Spend the remainder greedily --
     # by now every under-represented source has already had its chance.
@@ -256,8 +394,12 @@ def summarise(scored: list[Scored], excerpt_cap: int = 3000) -> dict:
     by_class: dict[str, int] = {}
     for s in sel:
         by_class[s.artifact_class] = by_class.get(s.artifact_class, 0) + 1
+    by_source: dict[str, int] = {}
+    for s in sel:
+        by_source[s.source_type] = by_source.get(s.source_type, 0) + 1
     return {
         "candidates": len(scored),
+        "by_source": dict(sorted(by_source.items(), key=lambda kv: -kv[1])),
         "selected": len(sel),
         "selected_tokens": sum(min(s.est_tokens, excerpt_cap) for s in sel),
         "candidate_tokens": sum(s.est_tokens for s in scored),

@@ -48,6 +48,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if not caps["presidio"]:
         print("  presidio adds NER for names/orgs the regexes cannot see.")
         print("  Install: pip install presidio-analyzer && python -m spacy download en_core_web_lg")
+    print(f"\n  pdf extraction   : {caps['pdf'] or 'MISSING'}")
+    if not caps["pdf"]:
+        print("  Without it every PDF is dropped silently into redaction-report failures.")
+        print("  Install: pip install pypdf   (or apt-get install poppler-utils)")
     try:
         cfg = Config.load(Path(args.config))
     except (FileNotFoundError, ValueError) as exc:
@@ -66,6 +70,71 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         return 1
     if not cfg.authors:
         print("\n  warning: without `authors`, every file scores as if you did not write it")
+    return 0
+
+
+def cmd_connectors(args: argparse.Namespace) -> int:
+    from .connectors import REGISTRY
+    try:
+        cfg = Config.load(Path(args.config))
+    except (FileNotFoundError, ValueError):
+        cfg = None
+    print("connectors (import into staging; they never read for the model)\n")
+    for name, connector in sorted(REGISTRY.items()):
+        ok, note = connector.available()
+        conf = (cfg.connectors.get(name, {}) if cfg else {})
+        enabled = conf.get("enabled", True)
+        state = "ready" if ok else "unavailable"
+        if ok and not enabled:
+            state = "disabled in config"
+        print(f"  {name:14} [{state}]")
+        print(f"      {connector.description}")
+        print(f"      {note}")
+        if cfg:
+            staged = list((cfg.staging_root / name).glob("*.md")) \
+                if cfg.staging_root.exists() else []
+            if staged:
+                print(f"      staged: {len(staged)} item(s)")
+    print("\n  career connect <name>   imports into workspace/00_staging/<name>/")
+    return 0
+
+
+def cmd_connect(args: argparse.Namespace) -> int:
+    from .connectors import REGISTRY, write_items
+    cfg = Config.load(Path(args.config))
+    connector = REGISTRY.get(args.connector)
+    if not connector:
+        print(f"unknown connector {args.connector!r}; known: {', '.join(sorted(REGISTRY))}")
+        return 1
+    ok, note = connector.available()
+    if not ok:
+        print(f"{args.connector} unavailable: {note}")
+        return 1
+    conf = cfg.connectors.get(args.connector, {})
+    if conf.get("enabled") is False and not args.force:
+        print(f"{args.connector} is disabled in config (use --force)")
+        return 1
+
+    items = connector.fetch(conf, limit=args.limit)
+    if not items:
+        print(f"{args.connector}: nothing met the import threshold ({note})")
+        return 1
+    out, n = write_items(cfg.ws, args.connector, items, clean=not args.append)
+    print(f"{args.connector}: staged {n} item(s) -> {out}")
+
+    spans = [i.created_at[:10] for i in items if i.created_at]
+    if spans:
+        print(f"  span          : {min(spans)} .. {max(spans)}")
+    repos: dict[str, int] = {}
+    for i in items:
+        r = i.meta.get("repo") or "(none)"
+        repos[r] = repos.get(r, 0) + 1
+    top = sorted(repos.items(), key=lambda kv: -kv[1])[:6]
+    print(f"  contexts      : {', '.join(f'{k}({v})' for k, v in top)}")
+    words = sum(int(i.meta.get("human_chars") or 0) for i in items)
+    if words:
+        print(f"  your words    : {words:,} chars across {n} item(s)")
+    print(f"\nNext: python -m career scan   (staging is picked up automatically)")
     return 0
 
 
@@ -216,6 +285,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("doctor", parents=[common], help="check redaction tooling and config")
     s.set_defaults(func=cmd_doctor)
+
+    s = sub.add_parser("connectors", parents=[common], help="list import connectors")
+    s.set_defaults(func=cmd_connectors)
+
+    s = sub.add_parser("connect", parents=[common], help="import a source into staging")
+    s.add_argument("connector")
+    s.add_argument("--limit", type=int)
+    s.add_argument("--append", action="store_true", help="keep previously staged items")
+    s.add_argument("--force", action="store_true")
+    s.set_defaults(func=cmd_connect)
 
     s = sub.add_parser("scan", parents=[common], help="stage A: build the manifest")
     s.set_defaults(func=cmd_scan)
