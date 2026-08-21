@@ -25,10 +25,13 @@ TEMPLATE = {
     "allowlist": ["example.com", "localhost"],
     "per_source_share": 0.35,
     "connectors": {
-        "claude-code": {"enabled": True, "min_human_chars": 200}
+        "claude-code": {"enabled": True, "min_human_chars": 200},
+        "codex": {"enabled": True, "min_human_chars": 200},
+        "notion-export": {"enabled": True, "path": None, "min_relevance": 0.35},
+        "x-archive": {"enabled": True, "path": None, "min_relevance": 0.35}
     },
     "topic_policy": {
-        "enabled_for": ["chat"],
+        "enabled_for": ["chat", "notes", "public"],
         "drop_ratio": 0.5,
         "extra_topics": {}
     },

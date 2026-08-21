@@ -124,6 +124,36 @@ One more: a session where the person typed very little and the assistant did
 everything is weak evidence about the person, whatever got built. Check
 `human_turns` and `human_weight` in the header before writing an `owner` card.
 
+## Reading work notes (`class=work_note`) and public posts (`class=public_post`)
+
+Both come from places people use for everything, so both arrive with a
+`work_relevance=` score in the header. That score got them past the import
+filter; it says nothing about whether any individual claim in them is true.
+
+**Work notes** (Notion and similar) are written fast, never edited, and are
+often the only written record a project ever got. Two things to watch:
+*plans are not outcomes* — a note saying "we will move to event sourcing in
+Q3" is evidence of intent, not of a migration, and needs a `constraint` or
+`decision` card at most; and a note may be minutes of a meeting where someone
+else decided, so check whether the writer is reporting or deciding.
+
+**Public posts** are the trickiest source in the corpus, because they read
+like evidence and are not. A timeline post is *someone describing their own
+work to an audience*, with nothing backing it. So:
+
+- A post claiming an outcome ("cut the job from 6 hours to 40 minutes") is a
+  **self-report**, not an `impact` card. Write it as `self_concept`, or as a
+  low-confidence card whose `open_question` asks for the artifact — and
+  promote it only if a repository, note or session independently shows it.
+- What posts *are* good evidence of: sustained interest (what someone returns
+  to unprompted over years), how they explain things to non-experts, and how
+  they position themselves. `interest` and `collaboration` cards are fair;
+  `capability` cards from a post alone are not.
+- `posts=N` in the header means N posts were reassembled into one thread. A
+  long thread is someone working an argument through; a single post is a
+  remark. Do not treat engagement counts as quality — they are not in the
+  header on purpose, because likes measure the audience, not the author.
+
 ## Hard rules
 
 1. **Never invent a quote.** If you cannot quote it, you cannot claim it.
@@ -140,7 +170,10 @@ everything is weak evidence about the person, whatever got built. Check
    repo into modules" is noise.
 5. **Uncertainty is data.** `confidence: 0.4` plus a sharp `open_question`
    beats a confident guess.
-6. **8–20 cards per pack** is the healthy range. Forty cards means you carded
+6. **Claims about your own work, made by you, are never `impact`.** Whether
+   the sentence appears in a chat log, a note or a post, an outcome with no
+   artifact behind it is `self_concept` until something independent shows it.
+7. **8–20 cards per pack** is the healthy range. Forty cards means you carded
    boilerplate; three means you skimmed.
 
 ## Finish

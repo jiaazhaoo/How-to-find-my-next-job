@@ -81,26 +81,42 @@ def estimate_tokens(text: str) -> int:
     return int(cjk / 1.5 + (len(text) - cjk) / 4) + 1
 
 
-CHAT_MARKER = re.compile(r"<!--\s*source_type=chat\b")
-CHAT_META = re.compile(r"(\w+)=([\w./-]+)")
+STAGED_MARKER = re.compile(r"<!--\s*source_type=(\w+)")
+STAGED_META = re.compile(r"(\w+)=([\w./-]+)")
 HUMAN_TURN = re.compile(r"^## you(?: ·.*)?$", re.M)
 
 
-def is_chat(text: str) -> bool:
-    return bool(CHAT_MARKER.search(text[:400]))
+def staged_meta(text: str) -> dict:
+    """Read what the connector already computed, from the staged header.
+
+    Connectors know things triage cannot re-derive cheaply -- how many turns
+    were the person's, how a page scored for work relevance -- so they write
+    it into the header rather than making every later stage recompute it.
+    """
+    head = text[:800]
+    m = STAGED_MARKER.search(head)
+    if not m:
+        return {}
+    end = head.find("-->", m.start())
+    out: dict = {"source_type": m.group(1)}
+    for key, value in STAGED_META.findall(head[m.start():end if end > 0 else None]):
+        if value.isdigit():
+            out[key] = int(value)
+        else:
+            try:
+                out[key] = float(value)
+            except ValueError:
+                out[key] = value
+    return out
 
 
 def chat_meta(text: str) -> dict:
-    """Read the metrics the connector already computed, from the staged header."""
-    head = text[:800]
-    m = CHAT_MARKER.search(head)
-    if not m:
-        return {}
-    block = head[m.start():head.find("-->", m.start())]
-    out: dict[str, str | int] = {}
-    for key, value in CHAT_META.findall(block):
-        out[key] = int(value) if value.isdigit() else value
-    return out
+    meta = staged_meta(text)
+    return meta if meta.get("source_type") == "chat" else {}
+
+
+def is_chat(text: str) -> bool:
+    return staged_meta(text).get("source_type") == "chat"
 
 
 def human_turns(text: str) -> str:
@@ -118,9 +134,21 @@ def human_turns(text: str) -> str:
     return "\n".join(parts)
 
 
+# Imported material is classified by where it came from, not by its filename.
+SOURCE_CLASSES = {
+    "chat": ("chat_session", 2.2),
+    # Work notes sit between a spec and a scratchpad: often the only written
+    # record of a project, but written fast and never edited.
+    "notes": ("work_note", 2.0),
+    # Audience-facing writing. Strong evidence of interest and positioning,
+    # weak evidence of capability -- nothing on a timeline is verified.
+    "public": ("public_post", 1.6),
+}
+
+
 def classify(doc: Document) -> tuple[str, float]:
-    if doc.source_type == "chat":
-        return "chat_session", 2.2
+    if doc.source_type in SOURCE_CLASSES:
+        return SOURCE_CLASSES[doc.source_type]
     path = doc.path.replace("\\", "/")
     for name, pattern, weight in CLASS_PATTERNS:
         if pattern.search(path):
@@ -221,6 +249,22 @@ def score_document(doc: Document, text: str) -> Scored:
         bump = min(1.5, 0.4 * (doc.commits ** 0.5))
         score += bump
         reasons.append(f"churn={doc.commits}(+{bump:.2f})")
+
+    meta = staged_meta(text)
+    relevance = meta.get("work_relevance")
+    if isinstance(relevance, (int, float)):
+        # The connector already judged whether this is professional material at
+        # all. It gated the import; here it only nudges the ranking.
+        bump = round((float(relevance) - 0.5) * 2.0, 2)
+        score += bump
+        reasons.append(f"relevance={relevance}({bump:+.2f})")
+    posts = meta.get("posts")
+    if isinstance(posts, int) and posts > 1:
+        # Thread length is a proxy for substance. Engagement counts are not
+        # used at all: likes measure the audience, not the author.
+        bump = min(1.0, (posts - 1) * 0.25)
+        score += bump
+        reasons.append(f"thread={posts}(+{bump:.2f})")
 
     head = "\n".join(text.splitlines()[:5])
     if BOILERPLATE.search(head):

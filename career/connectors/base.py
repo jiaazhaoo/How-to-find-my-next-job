@@ -47,8 +47,12 @@ class Connector:
     source_type = "generic"
     description = ""
 
-    def available(self) -> tuple[bool, str]:
-        """(usable?, one-line explanation shown by `career connectors`)."""
+    def available(self, config: dict | None = None) -> tuple[bool, str]:
+        """(usable?, one-line explanation shown by `career connectors`).
+
+        Takes the connector's config because some sources are only reachable
+        once the user says where they unzipped the export.
+        """
         return False, "not implemented"
 
     def fetch(self, config: dict, limit: int | None = None) -> list[StagedItem]:

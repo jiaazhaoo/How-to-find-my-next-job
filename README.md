@@ -20,7 +20,10 @@ $EDITOR config/sources.json           # 填 sources / authors / sensitive_terms
 python -m career doctor               # 检查脱敏工具链和配置
 
 python -m career connectors           # 看有哪些可导入的源
-python -m career connect claude-code  # ⓪ 把本地 AI 会话日志导入 staging
+python -m career connect claude-code  # ⓪ 导入本地 AI 会话日志
+python -m career connect codex        #    另一个助手的会话（覆盖面）
+python -m career connect notion-export
+python -m career connect x-archive
 
 python -m career scan                 # ① 扫描（staging 自动纳入）→ 清单
 python -m career prep -v              # ②③ 脱敏 + 打分 + 选择 + 生成 read pack
@@ -68,12 +71,17 @@ workspace/
 
 | 源 | 独有贡献 | 状态 |
 |---|---|---|
-| 本地 Claude Code 会话 | 仓库记录什么上线了，会话记录你**试过什么**；且带 `cwd`/`gitBranch`，天然贴着提交 | ✅ |
+| Claude Code 会话 | 仓库记录什么上线了，会话记录你**试过什么**；带 `cwd`/`gitBranch`，天然贴着提交 | ✅ |
+| Codex 会话 | 同上。只导一个助手会让语料偏向你恰好在那个工具里做的事 | ✅ |
+| Notion 导出 | 项目文档和会议记录，常常是一个项目唯一的书面记录 | ✅ 需设 `path` |
+| X 归档 | 面向受众的写作 = 兴趣与定位；自我复述的长贴按线程重组 | ✅ 需设 `path` |
 | 个人博客 | 无报酬写作 = 强兴趣信号 | 待做 |
 | LinkedIn 导出 | 别人写的推荐 + 职位时间脊柱（**不当能力证据**） | 待做 |
-| 导出的 AI 对话 | 同会话日志，格式不同 | 待做 |
 | GitHub MCP | 你写在**别人 PR 上的 review 评论**——本地 clone 一条都没有 | 待做 |
 | 日历 | 你到底把时间花在哪了 | 待做 |
+
+"啥都放"的源（Notion / X）另有一层 `relevance` 分诊：**它决定什么值得发，不决定什么安全发**——
+后者永远是 `redact` 的事。导入时会打印相关度直方图，方便调 `min_relevance`。
 
 ## 三条不可协商的规则
 
@@ -81,7 +89,8 @@ workspace/
 - **没有引用就没有主张。** `verify` 会把编造的卡片抓出来（fixture 里试过）。
 - **不做人格推断。** claim 里出现"内向/性格/MBTI"直接判校验失败。LLM 从文本推断大五人格
   与真实量表的相关系数低于 r≈0.30；特质只能来自你亲自填的量表，不能来自模型读你的代码。
-- **不让自我描述变成能力证据。** 你在聊天记录里对自己的说法是 `self_concept` 卡片，
+- **不让自我描述变成能力证据。** 也包括推文里你自己宣称的成果——没有工件支撑的结果是 `self_concept`，
+  不是 `impact`。 你在聊天记录里对自己的说法是 `self_concept` 卡片，
   永远不能升级成 pattern——否则 AI 只是把你的自我认知加上引用还给你。
   它的正确用途是提问：**自述和作品之间的落差**。
 
@@ -89,7 +98,7 @@ workspace/
 
 | 层 | 状态 |
 |---|---|
-| ⓪ 连接器 / 输入源 | 本地 Claude Code 会话已完成，其余见上表 |
+| ⓪ 连接器 / 输入源 | 4 个已完成（见上表） |
 | ① 脱敏 | 已完成（含聊天记录的主题切除策略） |
 | ② 深读 → 证据卡片 | 已完成 |
 | ③ 画像（只用 pattern 写） | 未开始 |

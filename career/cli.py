@@ -81,8 +81,8 @@ def cmd_connectors(args: argparse.Namespace) -> int:
         cfg = None
     print("connectors (import into staging; they never read for the model)\n")
     for name, connector in sorted(REGISTRY.items()):
-        ok, note = connector.available()
         conf = (cfg.connectors.get(name, {}) if cfg else {})
+        ok, note = connector.available(conf)
         enabled = conf.get("enabled", True)
         state = "ready" if ok else "unavailable"
         if ok and not enabled:
@@ -106,11 +106,11 @@ def cmd_connect(args: argparse.Namespace) -> int:
     if not connector:
         print(f"unknown connector {args.connector!r}; known: {', '.join(sorted(REGISTRY))}")
         return 1
-    ok, note = connector.available()
+    conf = cfg.connectors.get(args.connector, {})
+    ok, note = connector.available(conf)
     if not ok:
         print(f"{args.connector} unavailable: {note}")
         return 1
-    conf = cfg.connectors.get(args.connector, {})
     if conf.get("enabled") is False and not args.force:
         print(f"{args.connector} is disabled in config (use --force)")
         return 1
@@ -127,13 +127,29 @@ def cmd_connect(args: argparse.Namespace) -> int:
         print(f"  span          : {min(spans)} .. {max(spans)}")
     repos: dict[str, int] = {}
     for i in items:
-        r = i.meta.get("repo") or "(none)"
-        repos[r] = repos.get(r, 0) + 1
-    top = sorted(repos.items(), key=lambda kv: -kv[1])[:6]
-    print(f"  contexts      : {', '.join(f'{k}({v})' for k, v in top)}")
+        r = i.meta.get("repo") or i.meta.get("breadcrumbs")
+        if r:
+            repos[r] = repos.get(r, 0) + 1
+    if repos:
+        top = sorted(repos.items(), key=lambda kv: -kv[1])[:6]
+        print(f"  contexts      : {', '.join(f'{k}({v})' for k, v in top)}")
     words = sum(int(i.meta.get("human_chars") or 0) for i in items)
     if words:
         print(f"  your words    : {words:,} chars across {n} item(s)")
+    unparsed = sum(int(i.meta.get("unparsed_records") or 0) for i in items)
+    if unparsed:
+        print(f"  unparsed      : {unparsed} record(s) in an unrecognised shape "
+              f"(format may have changed)")
+    counts = getattr(connector, "last_counts", None)
+    if counts:
+        print(f"  filtered      : " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    skipped = getattr(connector, "last_skipped", 0)
+    if skipped:
+        print(f"  below cutoff  : {skipped} item(s) scored under min_relevance")
+    hist = getattr(connector, "last_histogram", None)
+    if hist:
+        print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in hist.items()))
+        print(f"                  (tune connectors['{args.connector}'].min_relevance)")
     print(f"\nNext: python -m career scan   (staging is picked up automatically)")
     return 0
 
