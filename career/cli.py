@@ -22,16 +22,42 @@ def _human(n: int) -> str:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
+    from .config import TEMPLATE
+    from .discover import detect_sources
+
     path = Path(args.config)
     if path.exists() and not args.force:
         print(f"{path} already exists (use --force to overwrite)")
         return 1
-    write_template(path)
-    print(f"wrote {path}\n\nNext:\n"
-          f"  1. edit `sources` and `authors` (git name + email, so ownership works)\n"
-          f"  2. add every client / project code name to `sensitive_terms`\n"
-          f"  3. python -m career doctor\n"
-          f"  4. python -m career scan && python -m career prep")
+
+    found = detect_sources()
+    template = json.loads(json.dumps(TEMPLATE))   # deep copy
+    if found["identity"]:
+        template["authors"] = found["identity"]
+    for name, info in found["connectors"].items():
+        if info.get("discovered_path"):
+            template["connectors"].setdefault(name, {})["path"] = info["discovered_path"]
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", "utf-8")
+    print(f"wrote {path}\n")
+
+    if found["identity"]:
+        print(f"  authors      : {', '.join(found['identity'])}   (from git config)")
+    else:
+        print("  authors      : NOT FOUND -- set `git config user.name/user.email`, "
+              "or fill it in by hand, or ownership scoring is disabled")
+    for name, info in sorted(found["connectors"].items()):
+        mark = "ready" if info["ready"] else "-"
+        extra = f"   (found {info['discovered_path']})" if info.get("discovered_path") else ""
+        print(f"  {name:14}: {mark}{extra}")
+
+    print("\nOnly two things still need you:\n"
+          "  1. `sources` -- which repos and folders count as your work "
+          "(nothing on disk can tell us that)\n"
+          "  2. `sensitive_terms` -- client and project code names "
+          "(no scanner knows these are secret)\n"
+          "\nThen: python -m career doctor")
     return 0
 
 
@@ -57,6 +83,19 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError) as exc:
         print(f"\nconfig: {exc}")
         return 1
+    from .discover import detect_sources
+    found = detect_sources(cfg.connectors)
+    if not cfg.authors and found["identity"]:
+        print(f"\n  git identity found: {', '.join(found['identity'])} "
+              f"-- copy it into `authors`")
+    for name, info in sorted(found["connectors"].items()):
+        if info.get("discovered_path") and not cfg.connectors.get(name, {}).get("path"):
+            print(f"\n  {name}: found an export at {info['discovered_path']}")
+            print(f"    set connectors['{name}'].path to use it")
+    if not cfg.connectors.get("notion-export", {}).get("path"):
+        print("\n  no Notion export configured -- if Notion MCP is connected in your CLI,")
+        print("    run the `import-notion` skill instead of exporting by hand")
+
     print(f"\nconfig {args.config}")
     print(f"  sources          : {len(cfg.sources)}")
     missing = [str(r) for r in cfg.roots if not r.exists()]
@@ -151,6 +190,63 @@ def cmd_connect(args: argparse.Namespace) -> int:
         print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in hist.items()))
         print(f"                  (tune connectors['{args.connector}'].min_relevance)")
     print(f"\nNext: python -m career scan   (staging is picked up automatically)")
+    return 0
+
+
+def cmd_stage(args: argparse.Namespace) -> int:
+    """Stage items an agent fetched itself (e.g. over an MCP connector).
+
+    Keeps the contract intact: an agent may do the *fetching* -- that is what
+    an OAuth-only MCP server is good for -- but the material still lands as
+    files in staging and still goes through redaction like everything else.
+    Header format, relevance scoring and provenance stay here, in tested code,
+    rather than being hand-rolled differently by each importer.
+    """
+    from .connectors import StagedItem, write_items
+    from .relevance import histogram, work_score
+
+    cfg = Config.load(Path(args.config))
+    raw = sys.stdin.read() if args.file == "-" else Path(args.file).read_text("utf-8")
+    threshold = args.min_relevance
+
+    items, scores, skipped, bad = [], [], 0, 0
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+            text = rec["text"]
+            native_id = str(rec["native_id"])
+        except (json.JSONDecodeError, KeyError, TypeError):
+            bad += 1
+            continue
+        if not text.strip():
+            continue
+        score, signals = work_score(text)
+        scores.append(score)
+        if score < threshold:
+            skipped += 1
+            continue
+        header = (f"<!-- source_type={args.source_type} connector={args.connector} "
+                  f"work_relevance={score} -->")
+        items.append(StagedItem(
+            native_id=native_id, title=rec.get("title") or native_id,
+            text=f"{header}\n\n{text}",
+            created_at=rec.get("created_at", ""), updated_at=rec.get("updated_at", ""),
+            meta={"source_type": args.source_type, "work_relevance": score,
+                  "signals": signals, **(rec.get("meta") or {})}))
+
+    if not items:
+        print(f"nothing staged ({skipped} below cutoff, {bad} unparseable)")
+        return 1
+    out, n = write_items(cfg.ws, args.connector, items, clean=not args.append)
+    print(f"{args.connector}: staged {n} item(s) -> {out}")
+    if skipped:
+        print(f"  below cutoff  : {skipped} (min_relevance={threshold})")
+    if bad:
+        print(f"  unparseable   : {bad} line(s)")
+    print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in histogram(scores).items()))
+    print(f"\nNext: python -m career scan")
     return 0
 
 
@@ -311,6 +407,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--append", action="store_true", help="keep previously staged items")
     s.add_argument("--force", action="store_true")
     s.set_defaults(func=cmd_connect)
+
+    s = sub.add_parser("stage", parents=[common],
+                       help="stage items fetched elsewhere (JSONL in, files out)")
+    s.add_argument("--connector", required=True, help="name for the staging folder, e.g. notion-mcp")
+    s.add_argument("--source-type", default="notes", choices=["notes", "chat", "public", "file"])
+    s.add_argument("--file", default="-", help="JSONL path, or - for stdin")
+    s.add_argument("--min-relevance", type=float, default=0.35)
+    s.add_argument("--append", action="store_true")
+    s.set_defaults(func=cmd_stage)
 
     s = sub.add_parser("scan", parents=[common], help="stage A: build the manifest")
     s.set_defaults(func=cmd_scan)

@@ -15,8 +15,8 @@ Align what you have done with the tide of the times.
 无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。命令是 `python3`，不是 `python`。
 
 ```bash
-python -m career init                 # 写出 config/sources.json 模板
-$EDITOR config/sources.json           # 填 sources / authors / sensitive_terms
+python -m career init                 # 自动探测身份、会话日志、已下载的导出
+$EDITOR config/sources.json           # 只需补两项：sources 和 sensitive_terms
 python -m career doctor               # 检查脱敏工具链和配置
 
 python -m career connectors           # 看有哪些可导入的源
@@ -73,12 +73,15 @@ workspace/
 |---|---|---|
 | Claude Code 会话 | 仓库记录什么上线了，会话记录你**试过什么**；带 `cwd`/`gitBranch`，天然贴着提交 | ✅ |
 | Codex 会话 | 同上。只导一个助手会让语料偏向你恰好在那个工具里做的事 | ✅ |
-| Notion 导出 | 项目文档和会议记录，常常是一个项目唯一的书面记录 | ✅ 需设 `path` |
-| X 归档 | 面向受众的写作 = 兴趣与定位；自我复述的长贴按线程重组 | ✅ 需设 `path` |
+| Notion 导出 | 项目文档和会议记录，常常是一个项目唯一的书面记录 | ✅ 导出自动探测，或用 `import-notion` skill 走 MCP |
+| X 归档 | 面向受众的写作 = 兴趣与定位；自我复述的长贴按线程重组 | ✅ 导出自动探测（X API 已改按次计费，导出更划算） |
 | 个人博客 | 无报酬写作 = 强兴趣信号 | 待做 |
 | LinkedIn 导出 | 别人写的推荐 + 职位时间脊柱（**不当能力证据**） | 待做 |
 | GitHub MCP | 你写在**别人 PR 上的 review 评论**——本地 clone 一条都没有 | 待做 |
 | 日历 | 你到底把时间花在哪了 | 待做 |
+
+`career stage` 让 agent 通过 MCP 取到的内容走同一条流水线——取的方式可以变，
+**落成文件再脱敏这一步不能变**，否则闸门就成了摆设。代价见 [`docs/input-layer.md`](docs/input-layer.md#关于-mcp能替代手动配置的和不能的)。
 
 "啥都放"的源（Notion / X）另有一层 `relevance` 分诊：**它决定什么值得发，不决定什么安全发**——
 后者永远是 `redact` 的事。导入时会打印相关度直方图，方便调 `min_relevance`。
