@@ -12,7 +12,7 @@ Align what you have done with the tide of the times.
 
 ## 快速开始
 
-无依赖，Python 3.11+，全程本地运行。
+无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。命令是 `python3`，不是 `python`。
 
 ```bash
 python -m career init                 # 写出 config/sources.json 模板
