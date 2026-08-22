@@ -13,7 +13,7 @@ from . import reliability as reliability_mod
 from . import profile as profile_mod
 from . import pipeline, triage
 from .config import DEFAULT_CONFIG_PATH, Config, write_template
-from .discover import find_repos, git_identity
+from .discover import find_repos, git_identity, identities_in_repos
 from .redact import Redactor, Vault, capability_report
 
 
@@ -72,8 +72,8 @@ def cmd_init(args: argparse.Namespace) -> int:
             print(f"      ({len(repos) - len(keep)} more had fewer than "
                   f"{args.min_commits} commits from you -- see `career repos`)")
     else:
-        print("\n  sources      : no repos found with commits from you -- "
-              "add paths by hand, or check `authors`")
+        print("\n  sources      : 没找到你提交过的仓库")
+        _suggest_identities(found["identity"])
 
     print("\nOne thing still needs you, because it is not a fact on disk:\n"
           "  `sensitive_terms` -- client and project code names. "
@@ -81,6 +81,19 @@ def cmd_init(args: argparse.Namespace) -> int:
           "\nAlso worth a look: `career repos` shows every repo it found and why.\n"
           "\nThen: python -m career doctor")
     return 0
+
+
+def _suggest_identities(configured: list[str], hints: list[str] | None = None) -> None:
+    """The usual cause is a git identity that differs from commit authorship."""
+    seen = identities_in_repos(hints)
+    if not seen:
+        print("      扫描范围内没有任何 git 仓库——用 `career repos --search <目录>` 指定位置")
+        return
+    print(f"      配置里的身份是 {', '.join(configured) or '(空)'}，"
+          f"但仓库里的提交者是：")
+    for name, email, count in seen:
+        print(f"        {count:6} 次  {name} <{email}>")
+    print("      如果上面有你，把它填进 `authors`（git 全局身份和实际提交者不一致很常见）")
 
 
 def cmd_repos(args: argparse.Namespace) -> int:
@@ -103,7 +116,8 @@ def cmd_repos(args: argparse.Namespace) -> int:
 
     repos = find_repos(identity=identity, hints=args.search or None)
     if not repos:
-        print(f"no repositories with commits by {', '.join(identity)}")
+        print(f"没有找到 {', '.join(identity)} 提交过的仓库\n")
+        _suggest_identities(identity, args.search or None)
         return 1
 
     print(f"repositories with commits by {', '.join(identity)}\n")

@@ -11,7 +11,7 @@ count as "your work" is a judgement, not a fact on disk.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SEARCH_DIRS = ["~/Downloads", "~/Desktop", "~/Documents", "."]
@@ -79,6 +79,17 @@ def find_export(kind: str, hints: list[str] | None = None) -> Path | None:
     return None
 
 
+def identities_in_repos(hints: list[str] | None = None, limit: int = 8) -> list[tuple[str, str, int]]:
+    """Who actually wrote the commits in the repos we can see, by volume."""
+    tally: dict[tuple[str, str], int] = {}
+    for repo in find_repos(hints=hints, identity=[], only_mine=False):
+        for name, email, count in repo.top_authors:
+            key = (name, email)
+            tally[key] = tally.get(key, 0) + count
+    ranked = sorted(tally.items(), key=lambda kv: -kv[1])[:limit]
+    return [(name, email, count) for (name, email), count in ranked]
+
+
 def detect_sources(config_connectors: dict | None = None) -> dict:
     """Everything discoverable, in one call, for `init` and `doctor`."""
     from .connectors import REGISTRY
@@ -126,6 +137,12 @@ class RepoInfo:
     last_mine: str
     last_any: str
     authors: int
+    # Kept even when nothing matched: "no repos found" is a dead end unless it
+    # can also say who *did* write the commits. A configured git identity that
+    # differs from commit authorship is the normal case, not an edge case --
+    # a work laptop with a work email, personal repos committed under another,
+    # or a per-repo override set years ago.
+    top_authors: list[tuple[str, str, int]] = field(default_factory=list)
 
     @property
     def is_mine(self) -> bool:
@@ -162,29 +179,39 @@ def repo_authorship(repo: Path, identity: list[str]) -> RepoInfo | None:
     import re
     mine = {i.strip().lower() for i in identity if i.strip()}
     my_commits = total = authors = 0
+    seen: list[tuple[str, str, int]] = []
     for line in out.splitlines():
         m = re.match(r"\s*(\d+)\s+(.*?)\s+<(.+?)>", line)
         if not m:
             continue
-        count, name, email = int(m.group(1)), m.group(2).lower(), m.group(3).lower()
+        count, name, email = int(m.group(1)), m.group(2), m.group(3)
         total += count
         authors += 1
-        if any(token == name or token == email for token in mine):
+        seen.append((name, email, count))
+        if any(token == name.lower() or token == email.lower() for token in mine):
             my_commits += count
     if not total:
         return None
     return RepoInfo(
+        top_authors=sorted(seen, key=lambda a: -a[2])[:5],
         path=str(repo), name=repo.name, my_commits=my_commits, total_commits=total,
         my_share=round(my_commits / total, 3), authors=authors,
-        last_mine=_git("log", "-1", "--format=%aI",
-                       *[f"--author={i}" for i in identity[:1]], cwd=repo)[:10],
+        # No identity means "match nobody" -- used when we only want to know
+        # who the authors are. Passing an empty --author would match everyone.
+        last_mine=(_git("log", "-1", "--format=%aI", f"--author={identity[0]}",
+                        cwd=repo)[:10] if identity else ""),
         last_any=_git("log", "-1", "--format=%aI", cwd=repo)[:10],
     )
 
 
 def find_repos(hints: list[str] | None = None, identity: list[str] | None = None,
-               max_depth: int = 3, scan_budget: int = 4000) -> list[RepoInfo]:
-    """Every git repo you have actually committed to, most-yours first."""
+               max_depth: int = 3, scan_budget: int = 4000,
+               only_mine: bool = True) -> list[RepoInfo]:
+    """Every git repo you have actually committed to, most-yours first.
+
+    ``only_mine=False`` returns the repos that were scanned but matched
+    nobody, so a caller can show which identities do appear there.
+    """
     identity = identity or git_identity()
     budget = [scan_budget]
     seen: set[Path] = set()
@@ -201,7 +228,7 @@ def find_repos(hints: list[str] | None = None, identity: list[str] | None = None
                 continue
             seen.add(resolved)
             info = repo_authorship(repo, identity)
-            if info and info.is_mine:
+            if info and (info.is_mine or not only_mine):
                 repos.append(info)
     repos.sort(key=lambda r: (-r.my_commits, r.last_mine), reverse=False)
     repos.sort(key=lambda r: (r.my_commits, r.last_mine), reverse=True)

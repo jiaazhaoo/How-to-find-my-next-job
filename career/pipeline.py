@@ -44,7 +44,8 @@ def build_redactor(cfg: Config) -> Redactor:
 
 
 def run_scan(cfg: Config) -> tuple[list[Document], dict]:
-    docs, stats = ingest.scan(cfg.scan_roots, cfg.authors, since=cfg.since)
+    docs, stats = ingest.scan(cfg.scan_roots, cfg.authors, since=cfg.since,
+                              exclude=[cfg.ws])
     ingest.write_manifest(docs, cfg.manifest_path)
     (cfg.ws / "stats.json").write_text(
         json.dumps(stats, ensure_ascii=False, indent=2), "utf-8")

@@ -18,6 +18,8 @@ import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .connectors.base import STAGING_DIRNAME
+
 # Directories that never contain evidence about *you*.
 EXCLUDED_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "vendor", "third_party", "bower_components",
@@ -279,12 +281,36 @@ def git_identities(repo: Path) -> list[tuple[str, str, int]]:
 
 # -- the scan ---------------------------------------------------------------
 def scan(roots: list[Path], authors: list[str], since: str | None = None,
-         max_bytes: int = MAX_BYTES) -> tuple[list[Document], dict]:
+         max_bytes: int = MAX_BYTES,
+         exclude: list[Path] | None = None) -> tuple[list[Document], dict]:
+    """``exclude`` keeps the pipeline from eating its own output.
+
+    This is not hygiene, it is correctness. The workspace usually sits inside
+    a scanned source tree, and `03_redacted/` holds redacted *copies* of the
+    originals -- different bytes, so content hashing does not deduplicate
+    them. Scanned, the same passage enters the corpus under two document ids,
+    becomes two "independent sources", and manufactures a `pattern` out of a
+    single observation. That defeats the one rule the profile's credibility
+    rests on. Staging is the deliberate exception: it is imported material,
+    not output.
+    """
     docs: list[Document] = []
     seen_hashes: dict[str, str] = {}
     stats = {"seen": 0, "excluded": 0, "duplicates": 0, "kept": 0, "bytes_seen": 0,
              "bytes_kept": 0, "reasons": {}}
     own_cache: dict[Path, dict] = {}
+    blocked = [Path(e).expanduser().resolve() for e in (exclude or [])]
+
+    def is_output(path: Path) -> bool:
+        for base in blocked:
+            try:
+                rel = path.resolve().relative_to(base)
+            except ValueError:
+                continue
+            if rel.parts and rel.parts[0] == STAGING_DIRNAME:
+                return False       # imported material, not our output
+            return True
+        return False
 
     for root in roots:
         root = Path(root).expanduser().resolve()
@@ -299,6 +325,11 @@ def scan(roots: list[Path], authors: list[str], since: str | None = None,
             if not path.is_file() or path.is_symlink():
                 continue
             stats["seen"] += 1
+            if is_output(path):
+                stats["excluded"] += 1
+                stats["reasons"]["pipeline-output"] = \
+                    stats["reasons"].get("pipeline-output", 0) + 1
+                continue
             try:
                 size = path.stat().st_size
             except OSError:

@@ -198,6 +198,42 @@ class TestIngest(unittest.TestCase):
         self.assertEqual([Path(d.path).name for d in docs], ["notes.md"])
         self.assertGreaterEqual(stats["excluded"], 4)
 
+    def test_the_pipeline_does_not_ingest_its_own_output(self):
+        """Found on a real run, and the worst bug so far.
+
+        The workspace usually sits inside a scanned source tree. Redacted
+        copies differ from their originals byte-for-byte, so content hashing
+        does not catch them -- the same passage enters the corpus twice under
+        different ids, becomes two "independent sources", and manufactures a
+        pattern from one observation. Staging is the deliberate exception.
+        """
+        root = Path(tempfile.mkdtemp())
+        (root / "notes.md").write_text("# real\n" + "content " * 40, "utf-8")
+        ws = root / "workspace"
+        (ws / "03_redacted").mkdir(parents=True)
+        (ws / "03_redacted" / "abc.txt").write_text("# real\n" + "[[ORG_01]] " * 40, "utf-8")
+        (ws / "04_packs").mkdir()
+        (ws / "04_packs" / "pack-01.md").write_text("pack " * 60, "utf-8")
+        (ws / "00_staging" / "claude-code").mkdir(parents=True)
+        (ws / "00_staging" / "claude-code" / "s1.md").write_text(
+            "<!-- source_type=chat -->\n\n## you\n\n" + "imported " * 40, "utf-8")
+
+        docs, stats = scan([root], authors=["nobody"], exclude=[ws])
+        names = sorted(Path(d.path).name for d in docs)
+        self.assertEqual(names, ["notes.md", "s1.md"],
+                         "output must be skipped, imported material kept")
+        self.assertGreaterEqual(stats["reasons"].get("pipeline-output", 0), 2)
+
+    def test_scanning_twice_is_stable(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "a.md").write_text("# a\n" + "text " * 40, "utf-8")
+        ws = root / "workspace"
+        ws.mkdir()
+        first, _ = scan([root], authors=["nobody"], exclude=[ws])
+        (ws / "leftover.txt").write_text("output " * 60, "utf-8")
+        second, _ = scan([root], authors=["nobody"], exclude=[ws])
+        self.assertEqual(len(first), len(second))
+
     def test_identical_files_are_deduplicated(self):
         root = Path(tempfile.mkdtemp())
         body = "# same\n" + "text " * 40
