@@ -39,6 +39,38 @@ class TestScoring(unittest.TestCase):
             doc("p/src/a.py", ext=".py", my_line_share=0.0, authored_by_me=False), DECISION_DOC)
         self.assertGreater(mine.score, theirs.score)
 
+    def test_a_test_file_can_never_outrank_a_design_doc(self):
+        """Found by running the pipeline on a real repository, not a fixture.
+
+        Test files are dense with "because" and with numbers in assertions.
+        With class weight added rather than multiplied, that density let seven
+        of them into the read packs while redact.py was cut. A test file's
+        reasoning is about verifying code, not about the person's judgement.
+        """
+        dense_test = "\n".join(
+            f"# 因为边界情况，这里应该返回 {i}，否则 p99 会涨到 {i * 100}ms"
+            for i in range(40))
+        thin_doc = "# ADR-001 选型\n\n我们决定用 A 方案。\n"
+        test_score = triage.score_document(
+            doc("p/tests/test_core.py", ext=".py"), dense_test).score
+        doc_score = triage.score_document(
+            doc("p/docs/adr-001-choice.md"), thin_doc).score
+        self.assertGreater(doc_score, test_score,
+                           "marker density must not overcome artifact class")
+
+    def test_the_leftover_pass_stays_a_fallback(self):
+        """On a single-repo corpus the quotas do not bind, and "spend what is
+        left" quietly became the main route in -- 13 of 25 documents."""
+        scored = [triage.Scored(doc_id=f"d{i}", path=f"p/{i}.py", repo="r",
+                                artifact_class="source", score=10 - i * 0.5,
+                                est_tokens=1000) for i in range(30)]
+        selected = [s for s in triage.select(scored, 20000, excerpt_cap=1000)
+                    if s.selected]
+        leftover = [s for s in selected
+                    if any("leftover" in r for r in s.reasons)]
+        self.assertLess(len(leftover), len(selected) / 2,
+                        "the fallback must not become the main selection route")
+
     def test_classification(self):
         cases = {"p/docs/adr-003-x.md": "decision_record", "p/README.md": "readme",
                  "p/tests/test_a.py": "test", "p/config.yaml": "config",

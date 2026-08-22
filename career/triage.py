@@ -34,7 +34,8 @@ CLASS_PATTERNS: list[tuple[str, re.Pattern, float]] = [
     ("report", re.compile(r"report|analysis|研究|报告|方案|总结|白皮书|\.(pdf|docx)$", re.I), 2.6),
     ("readme", re.compile(r"(^|/)(readme|architecture|overview|design|contributing)"
                           r"(\.[a-z]+)?$", re.I), 2.4),
-    ("spec", re.compile(r"(^|/)(docs?|spec|specs|wiki|notes)/", re.I), 1.8),
+    ("spec", re.compile(r"(^|/)(docs?|spec|specs|wiki|notes)/"
+                        r"|(^|/)\.claude/(skills|agents|commands)/", re.I), 1.8),
     ("changelog", re.compile(r"(^|/)(changelog|history|releases?)(\.[a-z]+)?$", re.I), 1.6),
     ("slides", re.compile(r"\.pptx$", re.I), 1.5),
     ("notebook", re.compile(r"\.ipynb$", re.I), 1.4),
@@ -182,7 +183,7 @@ def score_chat(doc: Document, text: str) -> Scored:
     meta = chat_meta(text)
     mine = human_turns(text)
     reasons = ["class=chat_session(x2.2)"]
-    score = 2.2
+    score = 0.0
 
     # Weighted length keeps the scorer language-neutral (see the connector).
     chars = int(meta.get("human_weight") or meta.get("human_chars") or len(mine))
@@ -210,17 +211,31 @@ def score_chat(doc: Document, text: str) -> Scored:
         score -= 1.0
         reasons.append("watched-not-worked(-1.00)")
 
+    # Same shape as score_document: bonuses accumulate, then the class scales
+    # them. `select` sorts globally, so the two scorers must be on one scale
+    # or chat sessions are silently ranked against a different yardstick.
+    score = SOURCE_CLASSES["chat"][1] * (1.0 + max(score, 0.0))
     return Scored(doc_id=doc.id, path=doc.path, repo=meta.get("repo") or doc.repo,
                   artifact_class="chat_session", score=round(score, 3),
                   est_tokens=estimate_tokens(text), source_type="chat", reasons=reasons)
 
 
 def score_document(doc: Document, text: str) -> Scored:
+    """Signal bonuses are *scaled* by the artifact class, not added to it.
+
+    Adding them was a real mistake, and only real material exposed it: a test
+    file starts at 0.5 but is dense with "because" and with numbers in
+    assertions, so it collected +5 of bonuses and outranked the design
+    documents. On this repository that put seven test files into the read
+    packs while `redact.py` was cut. A test file's reasoning is about
+    verifying code, not about the person's judgement, and no amount of
+    marker density should let it outrank an ADR.
+    """
     if doc.source_type == "chat" or is_chat(text):
         return score_chat(doc, text)
     cls, base = classify(doc)
     reasons = [f"class={cls}(x{base})"]
-    score = base
+    score = 0.0
 
     n_lines = max(text.count("\n"), 1)
     decisions = len(DECISION_MARKERS.findall(text))
@@ -274,6 +289,8 @@ def score_document(doc: Document, text: str) -> Scored:
         score -= 0.6
         reasons.append("stub(-0.60)")
 
+    # Bonuses accumulate first, then the class scales the whole thing.
+    score = base * (1.0 + score)
     return Scored(doc_id=doc.id, path=doc.path, repo=doc.repo, artifact_class=cls,
                   score=round(score, 3), est_tokens=estimate_tokens(text),
                   source_type=doc.source_type, reasons=reasons)
@@ -363,9 +380,17 @@ def _excerpt_chat(text: str, budget_tokens: int) -> tuple[str, str]:
 
 
 # -- budgeted, stratified selection ----------------------------------------
+def _score_cutoff(scores: list[float], quantile: float = 0.4) -> float:
+    """Median-ish floor: the leftover pass should not scrape the barrel."""
+    if not scores:
+        return 0.0
+    ordered = sorted(scores)
+    return ordered[min(len(ordered) - 1, int(len(ordered) * quantile))]
+
+
 def select(scored: list[Scored], budget_tokens: int, per_repo_share: float = 0.4,
            per_class_share: float = 0.45, excerpt_cap: int = 3000,
-           per_source_share: float = 0.35) -> list[Scored]:
+           per_source_share: float = 0.35, leftover_share: float = 0.2) -> list[Scored]:
     """Greedy by score, held back by diversity quotas.
 
     ``per_repo_share`` caps how much of the budget any single repository may
@@ -415,17 +440,24 @@ def select(scored: list[Scored], budget_tokens: int, per_repo_share: float = 0.4
         by_class[ck] = by_class.get(ck, 0) + cost
         by_source[sk] = by_source.get(sk, 0) + cost
 
-    # Quotas can leave budget on the table. Spend the remainder greedily --
-    # by now every under-represented source has already had its chance.
+    # Quotas can leave budget on the table, but the fallback must stay a
+    # fallback. On this repository it was letting in 13 of 25 documents --
+    # the quotas were not binding on a single-repo corpus, so "spend what is
+    # left" quietly became the main route in, and it ignores diversity
+    # entirely. Cap it, and require a score worth spending on.
+    leftover_cap = budget_tokens * leftover_share
+    cutoff = _score_cutoff([s.score for s in scored])
+    spent_leftover = 0.0
     for s in scored:
-        if s.selected:
+        if s.selected or s.score < cutoff:
             continue
         cost = cost_of(s)
-        if used + cost > budget_tokens:
+        if used + cost > budget_tokens or spent_leftover + cost > leftover_cap:
             continue
         s.selected = True
         s.reasons.append("filled:leftover-budget")
         used += cost
+        spent_leftover += cost
 
     for s in scored:
         if s.selected:
