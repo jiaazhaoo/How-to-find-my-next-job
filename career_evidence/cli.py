@@ -390,6 +390,14 @@ def cmd_terms(args: argparse.Namespace) -> int:
     s = found.signals
     print(f"扫描了 {s['files_scanned']} 个文件、{s['repos_scanned']} 个仓库\n")
 
+    if not s["files_scanned"]:
+        print("没有扫到任何文件——`sources` 指向的路径不存在。")
+        print("先让它有材料可读，再谈保护什么：")
+        for root in cfg.roots:
+            print(f"  {'?' if not root.exists() else '-'} {root}")
+        print("\n  career-evidence repos --write   自动填上你提交过的仓库")
+        return 1
+
     if found.looks_personal and not found.candidates:
         print("没有发现任何需要保护的东西：")
         print("  · git 里只有你一个提交者，没有同事的名字")

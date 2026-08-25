@@ -97,6 +97,11 @@ class Suggestion:
         think hard about.
         """
         s = self.signals
+        # Having scanned nothing is not evidence of anything. Concluding "no
+        # client here" from an empty scan is the exact false confidence this
+        # project exists to avoid.
+        if not s.get("files_scanned"):
+            return False
         return (s.get("other_committers", 0) == 0
                 and not s.get("corporate_domains")
                 and s.get("internal_hosts", 0) == 0

@@ -301,6 +301,12 @@ class TestTermSuggestion(unittest.TestCase):
         self.assertTrue(found.looks_personal)
         self.assertEqual(found.candidates, [])
 
+    def test_scanning_nothing_concludes_nothing(self):
+        """An empty scan is not evidence that there is nothing to protect."""
+        from career_evidence.terms import suggest
+        found = suggest([], ["Me"], [])
+        self.assertFalse(found.looks_personal)
+
     def test_public_mail_is_not_a_corporate_signal(self):
         found = self.suggest("联系 me@gmail.com 或 you@qq.com")
         self.assertTrue(found.looks_personal)
