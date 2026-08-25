@@ -19,7 +19,7 @@ git clone -b claude/career-profile-assessment-t4xmll \
   https://github.com/jiaazhaoo/How-to-find-my-next-job.git
 cd How-to-find-my-next-job
 pip install -e .                            # career-evidence 命令进 PATH
-python3 -m career_evidence install-skills   # /career-evidence 在任意目录可用
+./scripts/install-skills.sh                 # /career-evidence 在任意目录可用
 
 career-evidence run                         # 在哪都能跑
 ```
