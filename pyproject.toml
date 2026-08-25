@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "career-input-layer"
+version = "0.1.0"
+description = "Redact, then read deeply: evidence-based career profiling from your own artifacts"
+requires-python = ">=3.9"
+dependencies = []          # stdlib only, on purpose
+
+# Optional reinforcement (gitleaks, presidio-analyzer, pypdf) is deliberately
+# not declared here: none of it is required, and `career doctor` reports what
+# is missing along with how to install it.
+
+[project.scripts]
+career = "career.cli:main"
+
+[tool.setuptools]
+packages = ["career", "career.connectors"]

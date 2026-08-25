@@ -92,8 +92,8 @@ def _suggest_identities(configured: list[str], hints: list[str] | None = None) -
         return
     print(f"      配置里的身份是 {', '.join(configured) or '(空)'}，"
           f"但仓库里的提交者是：")
-    for name, email, count in seen:
-        print(f"        {count:6} 次  {name} <{email}>")
+    for name, email, count, repos in seen:
+        print(f"        {count:6} 次  {name} <{email}>   ({repos})")
     print("      如果上面有你，把它填进 `authors`（git 全局身份和实际提交者不一致很常见）")
 
 
@@ -638,7 +638,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     except (FileNotFoundError, ValueError):
         if config_path.exists():
             raise
-        print("没有配置，先建一个：\n")
+        # Config and workspace are relative paths, so running this from the
+        # wrong directory silently starts a second project there instead of
+        # continuing the one you meant. Say where, loudly, before creating it.
+        print(f"这里还没有项目，将在下面这个目录新建一个：\n")
+        print(f"    {Path.cwd()}\n")
+        print(f"如果你本来是想继续已有的项目，按 Ctrl-C，cd 过去再跑。\n")
         rc = cmd_init(argparse.Namespace(config=args.config, force=False,
                                          min_commits=3, max_repos=40))
         if rc != 0:

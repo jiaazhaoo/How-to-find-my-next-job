@@ -16,6 +16,32 @@ from pathlib import Path
 
 SEARCH_DIRS = ["~/Downloads", "~/Desktop", "~/Documents", "."]
 
+# Places where "look around here" produces noise rather than evidence. Run
+# from /tmp, discovery cheerfully offered a test fixture as the user's X
+# archive and a vendored copy of rbenv as their work -- complete with its
+# maintainers listed as candidate identities for them.
+NOT_A_WORKSPACE = {"/", "/tmp", "/var", "/usr", "/etc", "/opt", "/bin", "/root"}
+
+
+def _usable_cwd_hints(raw_hints: list[str]) -> list[str]:
+    """Drop "." / ".." when the current directory is not somewhere work lives."""
+    home = str(Path.home())
+    out = []
+    for hint in raw_hints:
+        if hint not in (".", ".."):
+            out.append(hint)
+            continue
+        try:
+            resolved = str(Path(hint).resolve())
+        except OSError:
+            continue
+        if resolved in NOT_A_WORKSPACE or resolved == home:
+            continue
+        if "/tmp/" in resolved + "/" or resolved.startswith("/var/folders"):
+            continue
+        out.append(hint)
+    return out
+
 
 def _git(*args: str, cwd: Path | None = None) -> str:
     try:
@@ -55,7 +81,7 @@ def looks_like_notion_export(path: Path) -> bool:
 
 def _candidates(hints: list[str] | None = None) -> list[Path]:
     out: list[Path] = []
-    for raw in (hints or SEARCH_DIRS):
+    for raw in _usable_cwd_hints(list(hints or SEARCH_DIRS)):
         base = Path(raw).expanduser()
         if not base.is_dir():
             continue
@@ -79,15 +105,24 @@ def find_export(kind: str, hints: list[str] | None = None) -> Path | None:
     return None
 
 
-def identities_in_repos(hints: list[str] | None = None, limit: int = 8) -> list[tuple[str, str, int]]:
-    """Who actually wrote the commits in the repos we can see, by volume."""
+def identities_in_repos(hints: list[str] | None = None,
+                        limit: int = 8) -> list[tuple[str, str, int, str]]:
+    """Who wrote the commits in the repos we can see, and where.
+
+    The repository name matters: discovery can reach a vendored dependency or
+    someone else's clone, and a bare list of names invites the user to paste a
+    stranger's identity into their config.
+    """
     tally: dict[tuple[str, str], int] = {}
+    where: dict[tuple[str, str], set] = {}
     for repo in find_repos(hints=hints, identity=[], only_mine=False):
         for name, email, count in repo.top_authors:
             key = (name, email)
             tally[key] = tally.get(key, 0) + count
+            where.setdefault(key, set()).add(repo.name)
     ranked = sorted(tally.items(), key=lambda kv: -kv[1])[:limit]
-    return [(name, email, count) for (name, email), count in ranked]
+    return [(name, email, count, ", ".join(sorted(where[(name, email)])[:3]))
+            for (name, email), count in ranked]
 
 
 def detect_sources(config_connectors: dict | None = None) -> dict:
@@ -219,7 +254,7 @@ def find_repos(hints: list[str] | None = None, identity: list[str] | None = None
     budget = [scan_budget]
     seen: set[Path] = set()
     repos: list[RepoInfo] = []
-    for raw in (hints or REPO_SEARCH_DIRS):
+    for raw in _usable_cwd_hints(list(hints or REPO_SEARCH_DIRS)):
         base = Path(raw).expanduser()
         if not base.is_dir():
             continue

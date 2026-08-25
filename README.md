@@ -15,7 +15,12 @@ Align what you have done with the tide of the times.
 无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。
 
 ```bash
-python3 -m career run
+git clone -b claude/career-profile-assessment-t4xmll \
+  https://github.com/jiaazhaoo/How-to-find-my-next-job.git
+cd How-to-find-my-next-job
+pip install -e .        # 可选，装完 `career` 在哪都能敲
+
+python3 -m career run   # 或者装过之后直接 `career run`
 ```
 
 就这一个命令。它会做完所有能自动做的事，停在第一个真正需要你的地方，
@@ -23,6 +28,8 @@ python3 -m career run
 
 在 Claude Code 里更简单——直接 `/career`，它替你跑上面这个循环，
 连深读和访谈也一并做了。
+
+配置和 workspace 都是相对路径，所以**在你的项目目录里跑**。在别处跑它会明说要新建一个项目。
 
 **只有三处真的需要你**：填客户名和项目代号（没有扫描器能替你做）、
 亲眼过一遍脱敏结果、回答访谈问题。其余都是自动的。

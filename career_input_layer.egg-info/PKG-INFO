@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: career-input-layer
+Version: 0.1.0
+Summary: Redact, then read deeply: evidence-based career profiling from your own artifacts
+Requires-Python: >=3.9
+Provides-Extra: extras
+Requires-Dist: gitleaks-installed-separately; python_version < "0" and extra == "extras"

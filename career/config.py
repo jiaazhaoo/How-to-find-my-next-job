@@ -61,7 +61,11 @@ class Config:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(
-                f"{path} not found. Run `python -m career init` first.")
+                f"{path} 不存在。\n"
+                f"  · 第一次用：career init\n"
+                f"  · 已经建过：从项目目录里运行（配置和 workspace 都是相对路径），"
+                f"或者用 --config 指定绝对路径。\n"
+                f"  当前目录：{Path.cwd()}")
         data = json.loads(path.read_text("utf-8"))
         known = {f for f in cls.__dataclass_fields__}
         unknown = set(data) - known

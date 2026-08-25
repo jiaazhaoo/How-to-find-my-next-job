@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -38,6 +39,20 @@ class TestDiscovery(unittest.TestCase):
         plain = Path(tempfile.mkdtemp())
         (plain / "notes.md").write_text("x", "utf-8")
         self.assertFalse(looks_like_notion_export(plain))
+
+    def test_discovery_refuses_to_wander_into_system_directories(self):
+        """Run from /tmp, discovery offered a test fixture as the user's X
+        archive and a vendored rbenv clone as their work history."""
+        from career.discover import _usable_cwd_hints
+
+        self.assertEqual(_usable_cwd_hints(["~/code", "."]), ["~/code", "."]
+                         if str(Path(".").resolve()) not in ("/tmp", "/") else ["~/code"])
+        cwd = os.getcwd()
+        try:
+            os.chdir("/tmp")
+            self.assertEqual(_usable_cwd_hints([".", "..", "~/code"]), ["~/code"])
+        finally:
+            os.chdir(cwd)
 
     def test_find_export_searches_download_style_folders(self):
         downloads = Path(tempfile.mkdtemp())
