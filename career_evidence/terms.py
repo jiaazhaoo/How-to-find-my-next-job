@@ -59,6 +59,10 @@ FUNCTION_CHARS = set("的了是和在这那就而也都还把被对从与及或�
 # match had already consumed its characters -- so a junk candidate starting
 # two characters early hid the real name behind it. As a lookahead nothing is
 # consumed and every position gets tried.
+# Directional complements: common at the end of a verb phrase, vanishingly
+# rare at the end of a company or project name.
+VERB_TAIL = set("出到上下来去成过好完掉起住开走清做用查找看写读跑改")
+
 ORG_SUFFIX = re.compile(
     r"(?=([\u4e00-\u9fff]{2,6}?)(?:公司|科技|集团|银行|保险|证券|医院|大学|研究院|"
     r"事业部|控股|实业|资本|基金))")
@@ -141,12 +145,17 @@ def suggest(paths: list[Path], authors: list[str], repos: list = None,
                 continue
             phrases[phrase] += 1
             where.setdefault(phrase, set()).add(name)
+        # A verb phrase is not a name. My own documentation sentence
+        # "扫材料找出公司名、项目代号" matched the organisation pattern and
+        # surfaced 扫材料找出 as a candidate -- the detector caught its own prose.
         for pattern, bucket in ((ORG_SUFFIX, cjk), (PROJECT_SUFFIX, cjk),
                                 (CLIENT_PREFIX, cjk)):
             for run in pattern.findall(text):
                 if run in CJK_STOP or not 2 <= len(run) <= 6:
                     continue
                 if FUNCTION_CHARS & set(run):
+                    continue
+                if run[-1] in VERB_TAIL:
                     continue
                 bucket[run] += 1
                 where.setdefault(run, set()).add(name)

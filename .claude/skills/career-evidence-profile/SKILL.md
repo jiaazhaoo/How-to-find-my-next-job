@@ -108,3 +108,9 @@ you are writing.
 Report: how many themes were usable, how many claims you made, the check
 result, and the single most decision-relevant sentence in the document. If the
 check returns errors, fix them and re-run before reporting anything.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.

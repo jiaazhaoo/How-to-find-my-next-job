@@ -87,3 +87,9 @@ Fetch in batches of 20–30, staging each batch with `--append`, and stop to
 check with the user if you are past ~200 pages. Volume also has a downstream
 cost: `notes` material shares one source-type quota, so importing 2000 pages
 does not get 2000 pages read — it just makes the selection noisier.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.

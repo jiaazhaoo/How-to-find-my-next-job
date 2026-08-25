@@ -189,3 +189,9 @@ Fix or delete any card that fails verification. Then report: cards written,
 cards verified, and the two or three open questions you would most want
 answered. Do **not** write a profile — that is a later stage, and it must be
 built only from cards marked `pattern`.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.

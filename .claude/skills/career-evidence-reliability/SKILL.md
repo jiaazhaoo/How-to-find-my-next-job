@@ -89,3 +89,9 @@ If the numbers are poor, do not quietly rerun until they improve. That is
 p-hacking with extra steps. Report the first honest measurement, then change
 something specific — the deep-read instructions, the pack, the card schema —
 and measure again as a separate, labelled result.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.

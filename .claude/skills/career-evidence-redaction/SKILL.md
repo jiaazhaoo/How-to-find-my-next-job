@@ -82,3 +82,9 @@ State plainly:
 Then say explicitly whether the packs are cleared to send to a model. If you
 are unsure about a single string, treat it as unsafe: adding a term costs one
 line of config, and a leaked client name cannot be recalled.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.

@@ -100,3 +100,9 @@ Two fields decide whether this helps or pollutes:
 anecdote can become a pattern this way, because their word is a genuinely
 independent source. Tell them what changed, then point at
 `career-evidence profile`.
+
+## Language
+
+Reply in whatever language the user is writing in. These instructions are in
+English because the code is; that is not a reason to answer a Chinese question
+in English.
