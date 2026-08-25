@@ -6,8 +6,25 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_CONFIG_PATH = Path("config/sources.json")
+# Your career corpus spans every repository you have ever worked in, so it is
+# yours, not any one project's. Requiring you to stand inside a particular
+# folder to analyse all the others was backwards. The data lives in one place
+# under HOME; a project-local config still wins when there is one, which is
+# what makes developing this tool on itself possible.
+USER_HOME_DIR = Path("~/.career").expanduser()
+LOCAL_CONFIG_PATH = Path("config/sources.json")
+USER_CONFIG_PATH = USER_HOME_DIR / "sources.json"
+DEFAULT_CONFIG_PATH = LOCAL_CONFIG_PATH        # kept for callers passing paths
 DEFAULT_WORKSPACE = Path("workspace")
+
+
+def resolve_config_path(explicit: str | None = None) -> Path:
+    """--config > a project-local config that exists > the one under HOME."""
+    if explicit:
+        return Path(explicit).expanduser()
+    if LOCAL_CONFIG_PATH.exists():
+        return LOCAL_CONFIG_PATH
+    return USER_CONFIG_PATH
 
 TEMPLATE = {
     "sources": ["~/code/my-project", "~/Documents/reports"],
@@ -56,6 +73,8 @@ class Config:
     topic_policy: dict = field(default_factory=dict)
     workspace: str = str(DEFAULT_WORKSPACE)
 
+    _path: Path | None = field(default=None, repr=False, compare=False)
+
     @classmethod
     def load(cls, path: Path) -> "Config":
         path = Path(path)
@@ -67,11 +86,13 @@ class Config:
                 f"或者用 --config 指定绝对路径。\n"
                 f"  当前目录：{Path.cwd()}")
         data = json.loads(path.read_text("utf-8"))
-        known = {f for f in cls.__dataclass_fields__}
+        known = {f for f in cls.__dataclass_fields__ if not f.startswith("_")}
         unknown = set(data) - known
         if unknown:
             raise ValueError(f"unknown config keys: {sorted(unknown)}")
-        return cls(**data)
+        cfg = cls(**data)
+        cfg._path = path.resolve()
+        return cfg
 
     @property
     def roots(self) -> list[Path]:
@@ -80,7 +101,20 @@ class Config:
     # workspace paths -------------------------------------------------
     @property
     def ws(self) -> Path:
-        return Path(self.workspace)
+        """Relative workspaces resolve against the config file, not the shell.
+
+        Otherwise `career run` from a different directory would look for its
+        own output somewhere else and quietly start over.
+        """
+        raw = Path(self.workspace).expanduser()
+        if raw.is_absolute() or self._path is None:
+            return raw
+        # Hand-written relative paths resolve against the config file. `init`
+        # writes absolute ones precisely so this case does not come up.
+        base = self._path.parent
+        if base.name == "config":
+            base = base.parent
+        return base / raw
 
     @property
     def staging_root(self) -> Path:

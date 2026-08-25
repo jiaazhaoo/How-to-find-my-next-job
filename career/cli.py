@@ -13,9 +13,14 @@ from . import interview as interview_mod
 from . import reliability as reliability_mod
 from . import profile as profile_mod
 from . import pipeline, triage
-from .config import DEFAULT_CONFIG_PATH, Config, write_template
+from .config import (LOCAL_CONFIG_PATH, USER_CONFIG_PATH, Config,
+                     resolve_config_path, write_template)
 from .discover import find_repos, git_identity, identities_in_repos
 from .redact import Redactor, Vault, capability_report
+
+
+def _config_path(args: argparse.Namespace) -> Path:
+    return resolve_config_path(getattr(args, "config", None))
 
 
 def _human(n: int) -> str:
@@ -30,7 +35,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     from .config import TEMPLATE
     from .discover import detect_sources
 
-    path = Path(args.config)
+    path = _config_path(args)
     if path.exists() and not args.force:
         print(f"{path} already exists (use --force to overwrite)")
         return 1
@@ -47,6 +52,15 @@ def cmd_init(args: argparse.Namespace) -> int:
     for name, info in found["connectors"].items():
         if info.get("discovered_path"):
             template["connectors"].setdefault(name, {})["path"] = info["discovered_path"]
+
+    # Write the workspace as an absolute path. A relative one has to be
+    # resolved against *something*, and every candidate is a guess: the shell's
+    # directory moves, and the config file's own directory puts the workspace
+    # inside `config/` when the config lives there. Absolute removes the
+    # question. The file is gitignored, so machine-specific paths are fine.
+    template["workspace"] = str(
+        (Path.cwd() if path.resolve() == LOCAL_CONFIG_PATH.resolve()
+         else path.parent) / "workspace")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", "utf-8")
@@ -105,7 +119,7 @@ def cmd_repos(args: argparse.Namespace) -> int:
     with an opinion.
     """
     try:
-        cfg = Config.load(Path(args.config))
+        cfg = Config.load(_config_path(args))
         identity = cfg.authors
         configured = {str(Path(p).expanduser().resolve()) for p in cfg.sources}
     except (FileNotFoundError, ValueError):
@@ -133,10 +147,10 @@ def cmd_repos(args: argparse.Namespace) -> int:
 
     if args.write:
         keep = [r.path for r in repos if r.my_commits >= args.min_commits]
-        data = json.loads(Path(args.config).read_text("utf-8"))
+        data = json.loads(_config_path(args).read_text("utf-8"))
         data["sources"] = keep
-        Path(args.config).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
-        print(f"\nwrote {len(keep)} path(s) to `sources` in {args.config}")
+        _config_path(args).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        print(f"\nwrote {len(keep)} path(s) to `sources` in {_config_path(args)}")
     return 0
 
 
@@ -158,7 +172,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print("  Without it every PDF is dropped silently into redaction-report failures.")
         print("  Install: pip install pypdf   (or apt-get install poppler-utils)")
     try:
-        cfg = Config.load(Path(args.config))
+        cfg = Config.load(_config_path(args))
     except (FileNotFoundError, ValueError) as exc:
         print(f"\nconfig: {exc}")
         return 1
@@ -175,7 +189,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print("\n  no Notion export configured -- if Notion MCP is connected in your CLI,")
         print("    run the `import-notion` skill instead of exporting by hand")
 
-    print(f"\nconfig {args.config}")
+    print(f"\nconfig {_config_path(args)}")
     print(f"  sources          : {len(cfg.sources)}")
     missing = [str(r) for r in cfg.roots if not r.exists()]
     for r in cfg.roots:
@@ -194,7 +208,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_connectors(args: argparse.Namespace) -> int:
     from .connectors import REGISTRY
     try:
-        cfg = Config.load(Path(args.config))
+        cfg = Config.load(_config_path(args))
     except (FileNotFoundError, ValueError):
         cfg = None
     print("connectors (import into staging; they never read for the model)\n")
@@ -219,7 +233,7 @@ def cmd_connectors(args: argparse.Namespace) -> int:
 
 def cmd_connect(args: argparse.Namespace) -> int:
     from .connectors import REGISTRY, write_items
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     connector = REGISTRY.get(args.connector)
     if not connector:
         print(f"unknown connector {args.connector!r}; known: {', '.join(sorted(REGISTRY))}")
@@ -293,7 +307,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
     from .connectors import StagedItem, write_items
     from .relevance import histogram, work_score
 
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     raw = sys.stdin.read() if args.file == "-" else Path(args.file).read_text("utf-8")
     threshold = args.min_relevance
 
@@ -339,7 +353,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     docs, stats = pipeline.run_scan(cfg)
     kept_pct = 100 * stats["bytes_kept"] / max(stats["bytes_seen"], 1)
     print(f"files seen      : {stats['seen']:,}")
@@ -357,7 +371,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_prep(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     if not cfg.manifest_path.exists():
         print("no manifest; run `python -m career scan` first")
         return 1
@@ -382,7 +396,7 @@ def cmd_prep(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     path = Path(args.cards or cfg.cards_path)
     if not path.exists():
         print(f"{path} not found")
@@ -407,7 +421,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_themes(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     path = Path(args.cards or cfg.cards_path)
     cards = cards_mod.load(path, strict=False)
     if cfg.corpus_path.exists():
@@ -453,7 +467,7 @@ def _load_graph(cfg: Config, cards_path: Path | None = None):
 
 
 def cmd_questions(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     if not cfg.cards_path.exists():
         print("no cards yet; run the `deep-read` skill first")
         return 1
@@ -488,7 +502,7 @@ def cmd_questions(args: argparse.Namespace) -> int:
 
 def cmd_answers(args: argparse.Namespace) -> int:
     """Fold interview answers back in as cards from an independent source."""
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     raw = sys.stdin.read() if args.file == "-" else Path(args.file).read_text("utf-8")
     records = []
     for line in raw.splitlines():
@@ -524,7 +538,7 @@ def cmd_answers(args: argparse.Namespace) -> int:
 
 
 def cmd_profile(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     cards, themes = _load_graph(cfg)
 
     if args.check:
@@ -572,7 +586,7 @@ def cmd_profile(args: argparse.Namespace) -> int:
 
 
 def cmd_reliability(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     paths = [Path(p) for p in args.runs]
     missing = [p for p in paths if not p.exists()]
     if missing:
@@ -632,7 +646,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     """Do every automatic step, stop at the first that needs a person."""
     import subprocess
 
-    config_path = Path(args.config)
+    config_path = _config_path(args)
     try:
         cfg = Config.load(config_path)
     except (FileNotFoundError, ValueError):
@@ -641,9 +655,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Config and workspace are relative paths, so running this from the
         # wrong directory silently starts a second project there instead of
         # continuing the one you meant. Say where, loudly, before creating it.
-        print(f"这里还没有项目，将在下面这个目录新建一个：\n")
-        print(f"    {Path.cwd()}\n")
-        print(f"如果你本来是想继续已有的项目，按 Ctrl-C，cd 过去再跑。\n")
+        target = _config_path(args)
+        print(f"还没有配置，将新建在：\n")
+        print(f"    {target}\n")
+        if target == USER_CONFIG_PATH:
+            print("这是你账户级的位置——`career` 在任何目录下都会用它，")
+            print("因为你的职业语料横跨所有仓库，本来就不属于某一个项目。\n")
+        else:
+            print("检测到当前目录有项目级配置，用它。\n")
         rc = cmd_init(argparse.Namespace(config=args.config, force=False,
                                          min_commits=3, max_repos=40))
         if rc != 0:
@@ -685,7 +704,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     vault = Vault.load(cfg.vault_path)
     text = Path(args.file).read_text("utf-8") if args.file != "-" else sys.stdin.read()
     sys.stdout.write(vault.restore(text))
@@ -694,7 +713,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
 def cmd_redact(args: argparse.Namespace) -> int:
     """One-off: redact a single file or stdin. Useful for ad-hoc pasting."""
-    cfg = Config.load(Path(args.config))
+    cfg = Config.load(_config_path(args))
     redactor = pipeline.build_redactor(cfg)
     text = Path(args.file).read_text("utf-8") if args.file != "-" else sys.stdin.read()
     out, report = redactor.redact_text(text, source=args.file)
@@ -704,10 +723,61 @@ def cmd_redact(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_install_skills(args: argparse.Namespace) -> int:
+    """Copy the skills to the user level so `/career` works in any folder.
+
+    They were project-scoped because they shell out to `python3 -m career`,
+    which only resolved from the repository root. Once the package is
+    installed that constraint is gone, and the original reason no longer
+    holds: a career corpus spans every repository, so requiring one
+    particular folder to be open was backwards.
+    """
+    import shutil
+
+    source = Path(__file__).resolve().parent.parent / ".claude" / "skills"
+    if not source.is_dir():
+        print(f"找不到技能目录：{source}")
+        return 1
+    target = Path("~/.claude/skills").expanduser()
+    target.mkdir(parents=True, exist_ok=True)
+
+    copied, skipped = [], []
+    for skill in sorted(source.iterdir()):
+        if not (skill / "SKILL.md").exists():
+            continue
+        dest = target / skill.name
+        if dest.exists() and not args.force:
+            skipped.append(skill.name)
+            continue
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(skill, dest)
+        copied.append(skill.name)
+
+    for name in copied:
+        print(f"  装好  {name}")
+    for name in skipped:
+        print(f"  已存在 {name}   (--force 覆盖)")
+    print(f"\n位置：{target}")
+    if shutil.which("career") is None:
+        print("\n  注意：`career` 不在 PATH 上。技能会调用它——")
+        print("  先在仓库目录里 `pip install -e .`，否则装了也用不了。")
+    else:
+        print("\n开新会话后，任意目录下 `/career` 都能用了。")
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     import unittest
+
+    # Find the suite next to the package, not next to the shell: now that the
+    # CLI runs from anywhere, `selftest` has to as well.
+    tests_dir = Path(__file__).resolve().parent.parent / "tests"
+    if not tests_dir.is_dir():
+        print(f"找不到测试目录（{tests_dir}）——从源码仓库里跑，或者用 pip install -e .")
+        return 1
     loader = unittest.TestLoader()
-    suite = loader.discover("tests")
+    suite = loader.discover(str(tests_dir), top_level_dir=str(tests_dir))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return 0 if result.wasSuccessful() else 1
 
@@ -717,7 +787,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="career",
         description="Redact, then read deeply: the input layer for evidence-based "
                     "career profiling.")
-    p.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    p.add_argument("--config", default=None,
+                   help="默认：当前目录的 config/sources.json（若存在），否则 ~/.career/sources.json")
     sub = p.add_subparsers(dest="command", required=True)
 
     # Accept --config on either side of the subcommand. SUPPRESS keeps the
@@ -815,6 +886,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("restore", parents=[common], help="put real identities back (local only)")
     s.add_argument("file")
     s.set_defaults(func=cmd_restore)
+
+    s = sub.add_parser("install-skills", parents=[common],
+                       help="把技能装到用户级，任意目录下都能用 /career")
+    s.add_argument("--force", action="store_true", help="覆盖已存在的同名技能")
+    s.set_defaults(func=cmd_install_skills)
 
     s = sub.add_parser("selftest", parents=[common], help="run the test suite")
     s.set_defaults(func=cmd_selftest)

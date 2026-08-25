@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -89,6 +90,55 @@ class TestNextStep(unittest.TestCase):
         seen.append(next_step(cfg, self.config_path).key)
         self.assertEqual(seen, ["connect", "scan", "prep", "review", "deep-read", "themes",
                                 "questions", "interview", "skeleton", "write", "check"])
+
+
+class TestConfigScope(unittest.TestCase):
+    """The corpus spans every repository, so it belongs to the user, not to
+    whichever folder happens to be open."""
+
+    def test_a_project_local_config_wins_when_present(self):
+        from career.config import LOCAL_CONFIG_PATH, USER_CONFIG_PATH, resolve_config_path
+
+        cwd = os.getcwd()
+        root = Path(tempfile.mkdtemp())
+        try:
+            os.chdir(root)
+            self.assertEqual(resolve_config_path(), USER_CONFIG_PATH)
+            (root / "config").mkdir()
+            (root / "config" / "sources.json").write_text("{}", "utf-8")
+            self.assertEqual(resolve_config_path(), LOCAL_CONFIG_PATH)
+        finally:
+            os.chdir(cwd)
+
+    def test_explicit_config_beats_both(self):
+        from career.config import resolve_config_path
+
+        self.assertEqual(resolve_config_path("/x/y.json"), Path("/x/y.json"))
+
+    def test_workspace_follows_the_config_not_the_shell(self):
+        """Otherwise running from elsewhere looks for its own output in the
+        wrong place and quietly starts over."""
+        root = Path(tempfile.mkdtemp())
+        config = root / "sources.json"
+        data = json.loads(json.dumps(TEMPLATE))
+        data.update({"authors": ["Me"], "workspace": "workspace"})
+        config.write_text(json.dumps(data), "utf-8")
+
+        cwd = os.getcwd()
+        try:
+            os.chdir(tempfile.mkdtemp())
+            self.assertEqual(Config.load(config).ws, root / "workspace")
+        finally:
+            os.chdir(cwd)
+
+    def test_a_config_directory_does_not_swallow_the_workspace(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "config").mkdir()
+        config = root / "config" / "sources.json"
+        data = json.loads(json.dumps(TEMPLATE))
+        data.update({"authors": ["Me"], "workspace": "workspace"})
+        config.write_text(json.dumps(data), "utf-8")
+        self.assertEqual(Config.load(config).ws, root / "workspace")
 
 
 class TestProgress(unittest.TestCase):
