@@ -45,12 +45,24 @@ class TestDiscovery(unittest.TestCase):
         archive and a vendored rbenv clone as their work history."""
         from career_evidence.discover import _usable_cwd_hints
 
-        self.assertEqual(_usable_cwd_hints(["~/code", "."]), ["~/code", "."]
-                         if str(Path(".").resolve()) not in ("/tmp", "/") else ["~/code"])
+        # Control the directory for both cases. The first version of this test
+        # asserted against wherever it happened to run, so it passed in a
+        # working copy and failed in a clone under /tmp -- a test whose result
+        # depends on where the repository sits is not testing anything.
         cwd = os.getcwd()
         try:
             os.chdir("/tmp")
-            self.assertEqual(_usable_cwd_hints([".", "..", "~/code"]), ["~/code"])
+            self.assertEqual(_usable_cwd_hints([".", "..", "~/code"]), ["~/code"],
+                             "temp directories are not where work lives")
+
+            workspace = Path(tempfile.mkdtemp(dir=str(Path.home())))
+            try:
+                os.chdir(workspace)
+                self.assertEqual(_usable_cwd_hints(["~/code", "."]), ["~/code", "."],
+                                 "an ordinary directory is a fair place to look")
+            finally:
+                os.chdir("/tmp")
+                workspace.rmdir()
         finally:
             os.chdir(cwd)
 
