@@ -98,16 +98,42 @@ def next_step(cfg: Config, config_path: Path) -> Step:
 
     staged = (cfg.staging_root.exists() and any(cfg.staging_root.glob("*/*.md"))) \
         or _has(cfg.ws / ".nochat")
-    if not staged and not cfg.sources:
+    # A non-empty `sources` full of paths that do not exist is the template's
+    # placeholders, not a configured project -- checking for non-empty let it
+    # sail past and fail three steps later.
+    real_sources = [r for r in cfg.roots if r.exists()]
+    if not staged and not real_sources:
+        from .discover import find_repos
+
+        from .discover import identities_in_repos
+
+        if find_repos(identity=cfg.authors):
+            return Step("sources", AUTO, "找出你提交过的仓库",
+                        "git 记录了每次提交的作者，所以这不是判断题",
+                        f"{cli()} repos --write")
+
+        seen = identities_in_repos()
+        if len(seen) == 1:
+            # One repository, one author, and you are the person running this.
+            # Asking whose commits these are would be a formality.
+            name, email, count, _ = seen[0]
+            return Step("adopt-identity", AUTO, f"采用 git 里的身份：{name} <{email}>",
+                        f"扫到的仓库里只有这一个提交者（{count} 次），"
+                        f"而配置里写的是 {', '.join(cfg.authors) or '空'}",
+                        f"{cli()} repos --adopt --write")
+        if seen:
+            listed = "; ".join(f"{n} <{e}> {c} 次" for n, e, c, _ in seen[:5])
+            return Step("authors", HUMAN, "确认哪个身份是你",
+                        f"扫到的仓库里有多个提交者，机器猜不出哪个是你：{listed}。"
+                        f"把你的那个填进 config 的 authors。")
         return Step("sources", HUMAN, "指定材料",
-                    "没有仓库也没有导入的材料。`career-evidence repos --write` 可以自动填仓库，"
-                    "或手工把目录加进 config 的 sources。")
+                    "扫描范围内找不到任何 git 仓库。把目录加进 config 的 sources，"
+                    f"或者 `{cli()} repos --search <目录>` 指定去哪找。")
 
     if _terms_untouched(cfg):
-        return Step("terms", HUMAN, "确认敏感词",
-                    "机器会先扫一遍材料给出候选，你只需要勾选哪些是真保密的——"
-                    "它认得出模式（XX公司、XX项目、内网域名、git 里的其他提交者），"
-                    "认不出哪个是机密。没有候选且没有公司痕迹时会自动判定为个人项目。",
+        return Step("terms", AUTO, "自动识别并隐藏敏感词",
+                    "扫材料找出公司名、项目代号、内网域名、其他提交者，全部纳入保护。"
+                    "过度隐藏只是多几个别名，漏掉一个客户名是泄露——两边代价不对称。",
                     f"{cli()} terms --auto")
 
     if not staged:
@@ -135,12 +161,13 @@ def next_step(cfg: Config, config_path: Path) -> Step:
                     "这一步之后才有东西可以给模型看", f"{cli()} prep -v")
 
     if not _has(cfg.ws / ".reviewed"):
-        packs = sorted(cfg.packs_dir.glob("pack-*.md"))
-        return Step("review", HUMAN, "亲眼过一遍脱敏结果",
-                    f"打开 {packs[0]} 找机器不可能知道的东西：正文里的同事名、"
-                    f"项目代号、内部链接。找到就加进 sensitive_terms 重跑 prep。"
-                    f"确认没问题后 `touch {cfg.ws}/.reviewed`。",
-                    "/career-evidence-redaction")
+        # Not a gate any more. A checkpoint everyone clicks through is
+        # security theatre, and it manufactures false assurance on top of
+        # doing nothing. What is left is a statement of residual risk, which
+        # is information rather than a ritual.
+        return Step("review", AUTO, "报告自动脱敏覆盖不到的部分",
+                    "把机器无法判断的类别明确列出来，然后继续",
+                    f"{cli()} residual --accept")
 
     if _count_lines(cfg.cards_path) == 0:
         packs = sorted(cfg.packs_dir.glob("pack-*.md"))

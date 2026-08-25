@@ -142,6 +142,24 @@ class TestConfigScope(unittest.TestCase):
         self.assertEqual(Config.load(config).ws, root / "workspace")
 
 
+class TestRunLoop(unittest.TestCase):
+    def test_the_loop_reloads_config_between_steps(self):
+        """Steps run as subprocesses and several rewrite the config. Loading
+        it once outside the loop meant the driver never saw its own effects
+        and repeated the same step forever."""
+        source = (Path(__file__).resolve().parent.parent
+                  / "career_evidence" / "cli.py").read_text("utf-8")
+        loop = source[source.index("    seen_steps"):source.index("if step.kind == driver_mod.HUMAN")]
+        self.assertIn("cfg = Config.load(config_path)", loop,
+                      "配置必须在循环内重新加载")
+
+    def test_a_step_that_changes_nothing_stops_the_loop(self):
+        source = (Path(__file__).resolve().parent.parent
+                  / "career_evidence" / "cli.py").read_text("utf-8")
+        self.assertIn("seen_steps[-2:] == [step.key, step.key]", source,
+                      "必须有死循环保护")
+
+
 class TestPackaging(unittest.TestCase):
     """The rename broke the install twice, in ways nothing here would catch:
     a package list still naming the old directory, and an entry point still

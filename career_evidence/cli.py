@@ -130,6 +130,20 @@ def cmd_repos(args: argparse.Namespace) -> int:
         print("no git identity -- set `git config user.name/user.email` or fill in `authors`")
         return 1
 
+    if getattr(args, "adopt", False):
+        seen = identities_in_repos(args.search or None)
+        if len(seen) == 1:
+            name, email, count, _ = seen[0]
+            identity = [name, email]
+            data = json.loads(_config_path(args).read_text("utf-8"))
+            data["authors"] = identity
+            _config_path(args).write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
+            print(f"采用身份：{name} <{email}>（{count} 次提交，是唯一的提交者）\n")
+        else:
+            print(f"提交者不止一个，不能自动采用——请自己填 authors")
+            return 1
+
     repos = find_repos(identity=identity, hints=args.search or None)
     if not repos:
         print(f"没有找到 {', '.join(identity)} 提交过的仓库\n")
@@ -147,7 +161,10 @@ def cmd_repos(args: argparse.Namespace) -> int:
     print("\n  * already in `sources`   - below --min-commits")
 
     if args.write:
-        keep = [r.path for r in repos if r.my_commits >= args.min_commits]
+        # Absolute: the config may live under HOME while the scan ran
+        # somewhere else, and "." means whatever directory reads it next.
+        keep = [str(Path(r.path).resolve())
+                for r in repos if r.my_commits >= args.min_commits]
         data = json.loads(_config_path(args).read_text("utf-8"))
         data["sources"] = keep
         _config_path(args).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
@@ -374,6 +391,9 @@ def _gather_terms(cfg: Config):
     return terms_mod.suggest(paths[:500], cfg.authors, repos)
 
 
+TEMPLATE_SAMPLE = {"Acme Corp", "北极星计划"}
+
+
 def cmd_terms(args: argparse.Namespace) -> int:
     """Propose sensitive terms rather than asking you to recall them.
 
@@ -411,19 +431,63 @@ def cmd_terms(args: argparse.Namespace) -> int:
             print(f"已把 sensitive_terms 设为空（之前是模板的示例值）。")
         return 0
 
-    print(f"找到 {len(found.candidates)} 个候选——**这是让你勾选，不是让你回忆**：\n")
+    print(f"找到 {len(found.candidates)} 个候选：\n")
     for i, c in enumerate(found.candidates, 1):
         where = f"  见于 {', '.join(c.files[:2])}" if c.files else ""
         print(f"  {i:2}. [{c.label:14}] {c.term}")
         print(f"      {c.why}{where}")
-    print(f"\n这些只是候选，机器不知道哪个是保密的——那一步只有你知道。")
-    print(f"确认要保护哪些之后，写进 config 的 sensitive_terms：")
-    print(f'  {{"term": "...", "label": "ORG"}}')
-    if args.write:
+
+    if args.write or args.auto:
+        # Protect everything found, rather than asking which ones matter. The
+        # costs are not symmetric: over-redacting costs a few extra aliases in
+        # text that stays readable, under-redacting leaks a client's name. A
+        # question whose safe answer is always "all of them" is not a question.
         data = json.loads(config_path.read_text("utf-8"))
-        data["sensitive_terms"] = [{"term": c.term, "label": c.label} for c in found.candidates]
+        existing = {t.get("term") for t in data.get("sensitive_terms") or []}
+        added = [{"term": c.term, "label": c.label}
+                 for c in found.candidates if c.term not in existing]
+        data["sensitive_terms"] = [t for t in (data.get("sensitive_terms") or [])
+                                   if t.get("term") not in TEMPLATE_SAMPLE] + added
         config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
-        print(f"\n--write：已把全部 {len(found.candidates)} 个写入配置。请删掉不该在里面的。")
+        print(f"\n全部已加入保护（{len(added)} 个新增）。别名是稳定的，")
+        print(f"所以文本仍然读得通——[[ORG_01]] 在哪都是同一家。")
+        print(f"觉得某个不该隐藏，从 config 的 sensitive_terms 里删掉即可。")
+    return 0
+
+
+def cmd_residual(args: argparse.Namespace) -> int:
+    """State what automatic redaction cannot cover, then get out of the way.
+
+    This replaced a mandatory review step. A checkpoint that everyone clicks
+    through does not make anything safer -- it manufactures assurance on top
+    of doing nothing. Naming the categories the machine cannot reach is worth
+    more, because it can be acted on when it matters and ignored when it does
+    not.
+    """
+    cfg = Config.load(_config_path(args))
+    report_path = cfg.redaction_report_path
+    totals, dropped = {}, 0
+    if report_path.exists():
+        data = json.loads(report_path.read_text("utf-8"))
+        totals = data.get("totals") or {}
+        dropped = len(data.get("failures") or [])
+
+    print(f"已自动隐藏 {sum(totals.values())} 处")
+    for label, n in list(totals.items())[:8]:
+        print(f"      {label:22} {n}")
+    if dropped:
+        print(f"  另有 {dropped} 份材料因无法完全清理而被整个排除（见 {report_path.name}）")
+
+    print("\n机器判断不了的，仍然可能留在 read pack 里：")
+    print("  · 正文里出现、但从没在 git 提交过的人名")
+    print("  · 不带「公司/项目/系统」这类后缀的代号")
+    print("  · 未发布或受合同限制的工作——这是合同问题，不是技术问题")
+    packs = sorted(cfg.packs_dir.glob("pack-*.md")) if cfg.packs_dir.exists() else []
+    if packs:
+        print(f"\n在意的话扫一眼 {packs[0]}，或者跑 /career-evidence-redaction。")
+        print("不在意就继续——下面的步骤不会等你。")
+    if args.accept:
+        (cfg.ws / ".reviewed").write_text("auto\n", "utf-8")
     return 0
 
 
@@ -745,8 +809,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         print()
         cfg = Config.load(config_path)
 
+    seen_steps: list[str] = []
     while True:
+        # Reload every iteration. Steps run as subprocesses and several of them
+        # rewrite the config; with a single load outside the loop the driver
+        # never sees its own effects and repeats the same step forever.
+        cfg = Config.load(config_path)
         step = driver_mod.next_step(cfg, config_path)
+        if step.kind == driver_mod.AUTO and seen_steps[-2:] == [step.key, step.key]:
+            print(f"\n  「{step.title}」跑了两次状态还是没变，停下来免得空转。")
+            print(f"  这一步是：{step.command}")
+            print(f"  多半是它没能改到驱动检查的东西——把上面的输出贴出来。")
+            return 1
+        seen_steps.append(step.key)
         if step.kind == driver_mod.HUMAN or args.status:
             break
         print(f"▶ {step.title}")
@@ -772,13 +847,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
     print(f"\n轮到你了：{step.title}\n")
     print(f"  {step.detail}\n")
-    if step.key == "terms":
-        print("  先看看机器能替你找到什么：\n")
-        try:
-            cmd_terms(argparse.Namespace(config=getattr(args, "config", None),
-                                         write=False, auto=False))
-        except (OSError, ValueError) as exc:
-            print(f"  （候选扫描失败：{exc}）")
     if step.command:
         print(f"  → {step.command}")
     print(f"\n做完之后再敲一次 `{driver_mod.cli()} run`，它会接着往下走。")
@@ -895,6 +963,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--min-commits", type=int, default=3)
     s.add_argument("--search", action="append", help="extra directory to search (repeatable)")
     s.add_argument("--write", action="store_true", help="write the result into `sources`")
+    s.add_argument("--adopt", action="store_true",
+                   help="仓库里只有一个提交者时，采用它作为 authors")
     s.set_defaults(func=cmd_repos)
 
     s = sub.add_parser("doctor", parents=[common], help="check redaction tooling and config")
@@ -925,6 +995,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--auto", action="store_true",
                    help="判定为个人项目时自动写空列表，否则只列出候选")
     s.set_defaults(func=cmd_terms)
+
+    s = sub.add_parser("residual", parents=[common],
+                       help="报告自动脱敏覆盖不到的部分")
+    s.add_argument("--accept", action="store_true", help="记录已知悉，继续往下走")
+    s.set_defaults(func=cmd_residual)
 
     s = sub.add_parser("scan", parents=[common], help="stage A: build the manifest")
     s.set_defaults(func=cmd_scan)
