@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from career import triage
-from career.connectors.codex import CodexConnector
-from career.connectors.notion_export import NotionExportConnector, clean_title
-from career.connectors.x_archive import XArchiveConnector
-from career.ingest import Document
-from career.relevance import weighted_length, work_score
+from career_evidence import triage
+from career_evidence.connectors.codex import CodexConnector
+from career_evidence.connectors.notion_export import NotionExportConnector, clean_title
+from career_evidence.connectors.x_archive import XArchiveConnector
+from career_evidence.ingest import Document
+from career_evidence.relevance import weighted_length, work_score
 
 LONG_CN = ("这个迁移脚本要幂等，之前回滚过一次。其实我更想先把对账任务上线，因为灰度期间只能人工核对，"
            "出问题也没法定位。容差不能拍脑袋定，应该按 p99 时钟偏移来算。")

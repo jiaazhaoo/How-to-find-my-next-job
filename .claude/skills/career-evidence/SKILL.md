@@ -1,18 +1,18 @@
 ---
-name: career
+name: career-evidence
 description: Drive the whole career-profiling pipeline from wherever it currently stands. Use when the user wants to start, continue, or check on building their evidence-based career profile, or asks what to do next with this project. Handles the sequencing so they never have to remember which of seventeen commands comes next.
 ---
 
 # Drive the pipeline
 
 The user should never have to remember the order of anything. Run
-`python3 -m career run`, do whatever it stops on, run it again. Repeat until
+`career-evidence run`, do whatever it stops on, run it again. Repeat until
 it stops on something only they can supply.
 
 ## The loop
 
 ```bash
-python3 -m career run
+career-evidence run
 ```
 
 It performs every automatic step and stops at the first gate, printing a
@@ -22,12 +22,12 @@ checklist and one instruction. Then:
 |---|---|
 | 填 authors / 指定材料 | help them fix the config, then loop |
 | 填 sensitive_terms | **ask them** — see below |
-| 亲眼过一遍脱敏结果 | run the `redaction-review` skill, then `touch workspace/.reviewed` |
-| 深读 | run `deep-read` on each pack in `workspace/04_packs/` |
-| 回答问题 | run the `interview` skill |
-| 写画像 | run the `profile` skill |
+| 亲眼过一遍脱敏结果 | run the `career-evidence-redaction` skill, then `touch workspace/.reviewed` |
+| 深读 | run `career-evidence-read` on each pack in `workspace/04_packs/` |
+| 回答问题 | run the `career-evidence-interview` skill |
+| 写画像 | run the `career-evidence-profile` skill |
 
-After each one, run `python3 -m career run` again. Never guess the next step
+After each one, run `career-evidence run` again. Never guess the next step
 from memory — the state machine knows and you do not.
 
 ## The two gates that are actually theirs
@@ -40,7 +40,7 @@ behind them, a client's name does not. If they genuinely have none, have them
 say so explicitly rather than leaving the sample values in place.
 
 **The interview.** Their answers are the only new information the whole
-system produces. Conduct it properly via the `interview` skill; do not
+system produces. Conduct it properly via the `career-evidence-interview` skill; do not
 summarise questions at them or answer on their behalf.
 
 ## When a step fails
@@ -55,5 +55,5 @@ output as a finding to report, not a setting to adjust.
 ## Reporting
 
 Keep it short. After each round, say what just happened, what the numbers
-were (`career run` prints them), and the one thing you need from them. Do not
+were (`career-evidence run` prints them), and the one thing you need from them. Do not
 re-explain the architecture; they can read `docs/` if they want it.

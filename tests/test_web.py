@@ -4,7 +4,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from career.connectors.web import WebConnector, discover_feed, html_to_text, parse_feed
+from career_evidence.connectors.web import WebConnector, discover_feed, html_to_text, parse_feed
 
 ARTICLE = ("我们决定用双写加对账做灰度，因为一次性切换没有回滚路径。接口改造涉及 reconcile 模块，"
            "数据库要加索引，p99 的目标是 150ms。上线后实际降到了 120ms，对账不一致率 0.002%。")

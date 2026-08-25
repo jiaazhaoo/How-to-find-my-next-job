@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from career import triage
-from career.cards import Card, Evidence, cluster, validate
-from career.connectors import REGISTRY, read_provenance, write_items
-from career.connectors.base import StagedItem, source_type_of
-from career.connectors.claude_code import ClaudeCodeConnector
-from career.ingest import Document, staged_source_type
-from career.redact import excise_topics
+from career_evidence import triage
+from career_evidence.cards import Card, Evidence, cluster, validate
+from career_evidence.connectors import REGISTRY, read_provenance, write_items
+from career_evidence.connectors.base import StagedItem, source_type_of
+from career_evidence.connectors.claude_code import ClaudeCodeConnector
+from career_evidence.ingest import Document, staged_source_type
+from career_evidence.redact import excise_topics
 
 
 def session_file(dirpath: Path, records: list[dict], name="s1.jsonl") -> Path:

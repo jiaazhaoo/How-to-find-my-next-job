@@ -10,7 +10,7 @@ Two families, treated very differently downstream:
 
 Everything here is stdlib-only so the gate runs on a laptop with no network
 and no install step. External scanners (gitleaks, Presidio) are optional
-reinforcements wired up in ``career.redact``, never prerequisites.
+reinforcements wired up in ``career_evidence.redact``, never prerequisites.
 """
 
 from __future__ import annotations

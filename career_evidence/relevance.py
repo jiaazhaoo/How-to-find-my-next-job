@@ -7,7 +7,7 @@ redaction gate or the topic policy -- a grocery list contains no identifier to
 redact and no sensitive topic to excise. It is simply not evidence.
 
 **This is a triage aid, not a privacy control.** Do not conflate the two:
-`career.redact` decides what is *safe* to send, this decides what is *worth*
+`career_evidence.redact` decides what is *safe* to send, this decides what is *worth*
 sending. A false negative here costs a little coverage. A false negative in
 the gate costs a leaked credential. They are tuned accordingly -- this one
 errs toward keeping things.

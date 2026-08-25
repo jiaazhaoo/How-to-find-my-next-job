@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from career import interview, profile
-from career.cards import Card, Evidence, cluster
+from career_evidence import interview, profile
+from career_evidence.cards import Card, Evidence, cluster
 
 
 def card(claim, kind, source, skills, role="owner", diff=3, conf=0.8, **kw):

@@ -1,5 +1,0 @@
-
-[extras]
-
-[extras:python_version < "0"]
-gitleaks-installed-separately

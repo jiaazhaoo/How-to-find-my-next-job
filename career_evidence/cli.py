@@ -1,4 +1,4 @@
-"""Command line entry point: ``python -m career <command>``."""
+"""Command line entry point: ``career-evidence <command>``."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             print(f"      ... and {len(keep) - 12} more, all written to the config")
         if len(repos) > len(keep):
             print(f"      ({len(repos) - len(keep)} more had fewer than "
-                  f"{args.min_commits} commits from you -- see `career repos`)")
+                  f"{args.min_commits} commits from you -- see `career-evidence repos`)")
     else:
         print("\n  sources      : 没找到你提交过的仓库")
         _suggest_identities(found["identity"])
@@ -93,8 +93,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     print("\nOne thing still needs you, because it is not a fact on disk:\n"
           "  `sensitive_terms` -- client and project code names. "
           "No scanner knows these are confidential.\n"
-          "\nAlso worth a look: `career repos` shows every repo it found and why.\n"
-          "\nThen: python -m career doctor")
+          "\nAlso worth a look: `career-evidence repos` shows every repo it found and why.\n"
+          "\nThen: career-evidence doctor")
     return 0
 
 
@@ -102,7 +102,7 @@ def _suggest_identities(configured: list[str], hints: list[str] | None = None) -
     """The usual cause is a git identity that differs from commit authorship."""
     seen = identities_in_repos(hints)
     if not seen:
-        print("      扫描范围内没有任何 git 仓库——用 `career repos --search <目录>` 指定位置")
+        print("      扫描范围内没有任何 git 仓库——用 `career-evidence repos --search <目录>` 指定位置")
         return
     print(f"      配置里的身份是 {', '.join(configured) or '(空)'}，"
           f"但仓库里的提交者是：")
@@ -187,7 +187,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             print(f"    set connectors['{name}'].path to use it")
     if not cfg.connectors.get("notion-export", {}).get("path"):
         print("\n  no Notion export configured -- if Notion MCP is connected in your CLI,")
-        print("    run the `import-notion` skill instead of exporting by hand")
+        print("    run the `career-evidence-notion` skill instead of exporting by hand")
 
     print(f"\nconfig {_config_path(args)}")
     print(f"  sources          : {len(cfg.sources)}")
@@ -291,7 +291,7 @@ def cmd_connect(args: argparse.Namespace) -> int:
     if hist:
         print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in hist.items()))
         print(f"                  (tune connectors['{args.connector}'].min_relevance)")
-    print(f"\nNext: python -m career scan   (staging is picked up automatically)")
+    print(f"\nNext: career-evidence scan   (staging is picked up automatically)")
     return 0
 
 
@@ -348,7 +348,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
     if bad:
         print(f"  unparseable   : {bad} line(s)")
     print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in histogram(scores).items()))
-    print(f"\nNext: python -m career scan")
+    print(f"\nNext: career-evidence scan")
     return 0
 
 
@@ -373,7 +373,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 def cmd_prep(args: argparse.Namespace) -> int:
     cfg = Config.load(_config_path(args))
     if not cfg.manifest_path.exists():
-        print("no manifest; run `python -m career scan` first")
+        print("no manifest; run `career-evidence scan` first")
         return 1
     s = pipeline.run_prep(cfg, use_gitleaks=not args.no_gitleaks, verbose=args.verbose)
     print(f"\nredacted        : {sum(s['redaction_totals'].values()):,} spans")
@@ -390,7 +390,7 @@ def cmd_prep(args: argparse.Namespace) -> int:
     print(f"\nread packs      : {len(s['packs'])}")
     for p in s["packs"]:
         print(f"      {p}")
-    print(f"\nNext: run the `deep-read` skill over each pack, appending cards to "
+    print(f"\nNext: run the `career-evidence-read` skill over each pack, appending cards to "
           f"{cfg.cards_path}")
     return 0
 
@@ -469,7 +469,7 @@ def _load_graph(cfg: Config, cards_path: Path | None = None):
 def cmd_questions(args: argparse.Namespace) -> int:
     cfg = Config.load(_config_path(args))
     if not cfg.cards_path.exists():
-        print("no cards yet; run the `deep-read` skill first")
+        print("no cards yet; run the `career-evidence-read` skill first")
         return 1
     cards, themes = _load_graph(cfg)
     candidates = interview_mod.generate(cards, themes, now_year=args.year)
@@ -495,8 +495,8 @@ def cmd_questions(args: argparse.Namespace) -> int:
     if cov["missing_angles"]:
         print(f"  angles unused : {', '.join(cov['missing_angles'])}")
     print(f"\nwrote {cfg.questions_path}")
-    print("Next: run the `interview` skill to ask these properly, then "
-          "`career answers --file <answers.jsonl>`")
+    print("Next: run the `career-evidence-interview` skill to ask these properly, then "
+          "`career-evidence answers --file <answers.jsonl>`")
     return 0
 
 
@@ -533,7 +533,7 @@ def cmd_answers(args: argparse.Namespace) -> int:
         print(f"\n你的回答让 {len(promoted)} 个主题获得了独立佐证：")
         for t in promoted[:5]:
             print(f"  - {t.label[:60]}")
-    print(f"\nNext: python -m career profile")
+    print(f"\nNext: career-evidence profile")
     return 0
 
 
@@ -580,8 +580,8 @@ def cmd_profile(args: argparse.Namespace) -> int:
         for g in skeleton.gaps[:6]:
             print(f"  ? {g[:70]}")
     print(f"\nwrote {cfg.skeleton_path}")
-    print("Next: run the `profile` skill to write it, then "
-          "`career profile --check workspace/09_profile.md`")
+    print("Next: run the `career-evidence-profile` skill to write it, then "
+          "`career-evidence profile --check workspace/09_profile.md`")
     return 0
 
 
@@ -594,7 +594,7 @@ def cmd_reliability(args: argparse.Namespace) -> int:
             print(f"missing: {p}")
         return 1
     if len(paths) < 2:
-        print("需要至少 2 次独立运行。见 `reliability-check` skill——"
+        print("需要至少 2 次独立运行。见 `career-evidence-reliability` skill——"
               "关键是每次必须在干净上下文里跑，否则测的是记忆不是信度。")
         return 1
 
@@ -699,7 +699,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"  {step.detail}\n")
     if step.command:
         print(f"  → {step.command}")
-    print(f"\n做完之后再敲一次 `python3 -m career run`，它会接着往下走。")
+    print(f"\n做完之后再敲一次 `{driver_mod.cli()} run`，它会接着往下走。")
     return 0
 
 
@@ -724,9 +724,9 @@ def cmd_redact(args: argparse.Namespace) -> int:
 
 
 def cmd_install_skills(args: argparse.Namespace) -> int:
-    """Copy the skills to the user level so `/career` works in any folder.
+    """Copy the skills to the user level so `/career-evidence` works in any folder.
 
-    They were project-scoped because they shell out to `python3 -m career`,
+    They were project-scoped because they shell out to `career-evidence`,
     which only resolved from the repository root. Once the package is
     installed that constraint is gone, and the original reason no longer
     holds: a career corpus spans every repository, so requiring one
@@ -763,7 +763,7 @@ def cmd_install_skills(args: argparse.Namespace) -> int:
         print("\n  注意：`career` 不在 PATH 上。技能会调用它——")
         print("  先在仓库目录里 `pip install -e .`，否则装了也用不了。")
     else:
-        print("\n开新会话后，任意目录下 `/career` 都能用了。")
+        print("\n开新会话后，任意目录下 `/career-evidence` 都能用了。")
     return 0
 
 
@@ -784,11 +784,11 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="career",
+        prog="career-evidence",
         description="Redact, then read deeply: the input layer for evidence-based "
                     "career profiling.")
     p.add_argument("--config", default=None,
-                   help="默认：当前目录的 config/sources.json（若存在），否则 ~/.career/sources.json")
+                   help="默认：当前目录的 config/sources.json（若存在），否则 ~/.career-evidence/sources.json")
     sub = p.add_subparsers(dest="command", required=True)
 
     # Accept --config on either side of the subcommand. SUPPRESS keeps the
@@ -888,7 +888,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_restore)
 
     s = sub.add_parser("install-skills", parents=[common],
-                       help="把技能装到用户级，任意目录下都能用 /career")
+                       help="把技能装到用户级，任意目录下都能用 /career-evidence")
     s.add_argument("--force", action="store_true", help="覆盖已存在的同名技能")
     s.set_defaults(func=cmd_install_skills)
 

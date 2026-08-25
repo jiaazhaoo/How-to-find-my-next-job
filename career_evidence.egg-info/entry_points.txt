@@ -1,0 +1,2 @@
+[console_scripts]
+career-evidence = career_evidence.cli:main

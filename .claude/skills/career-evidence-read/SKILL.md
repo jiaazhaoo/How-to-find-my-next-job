@@ -1,6 +1,6 @@
 ---
-name: deep-read
-description: Read a redacted read pack and emit verifiable evidence cards. Use when processing workspace/04_packs/pack-NN.md produced by `python -m career prep`, or whenever asked to extract career evidence from source material. Not for writing a profile — this stage only produces checkable claims with quotes.
+name: career-evidence-read
+description: Read a redacted read pack and emit verifiable evidence cards. Use when processing workspace/04_packs/pack-NN.md produced by `career-evidence prep`, or whenever asked to extract career evidence from source material. Not for writing a profile — this stage only produces checkable claims with quotes.
 ---
 
 # Deep read: turn a pack into evidence cards
@@ -181,8 +181,8 @@ work to an audience*, with nothing backing it. So:
 After writing cards for a pack:
 
 ```bash
-python -m career verify        # every quote must exist in the corpus
-python -m career themes        # cluster; ≥2 independent sources = pattern
+career-evidence verify        # every quote must exist in the corpus
+career-evidence themes        # cluster; ≥2 independent sources = pattern
 ```
 
 Fix or delete any card that fails verification. Then report: cards written,

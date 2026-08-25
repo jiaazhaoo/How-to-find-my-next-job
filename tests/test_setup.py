@@ -7,11 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from career.cli import main
-from career.config import TEMPLATE
-from career.discover import (find_export, git_identity, looks_like_notion_export,
+from career_evidence.cli import main
+from career_evidence.config import TEMPLATE
+from career_evidence.discover import (find_export, git_identity, looks_like_notion_export,
                              looks_like_x_archive)
-from career.ingest import staged_source_type
+from career_evidence.ingest import staged_source_type
 
 
 class TestDiscovery(unittest.TestCase):
@@ -43,7 +43,7 @@ class TestDiscovery(unittest.TestCase):
     def test_discovery_refuses_to_wander_into_system_directories(self):
         """Run from /tmp, discovery offered a test fixture as the user's X
         archive and a vendored rbenv clone as their work history."""
-        from career.discover import _usable_cwd_hints
+        from career_evidence.discover import _usable_cwd_hints
 
         self.assertEqual(_usable_cwd_hints(["~/code", "."]), ["~/code", "."]
                          if str(Path(".").resolve()) not in ("/tmp", "/") else ["~/code"])

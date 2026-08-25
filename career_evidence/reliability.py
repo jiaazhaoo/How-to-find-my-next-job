@@ -3,7 +3,7 @@
 The gap this closes
 -------------------
 Every claim this pipeline makes is traceable, which is not the same as
-reproducible. `deep-read` is a sampled model pass: run it on the same pack
+reproducible. `career-evidence-read` is a sampled model pass: run it on the same pack
 twice and you get two card sets, and until now nobody -- including me -- knew
 how different they are. Everything downstream inherits that variance, so
 without a number here, the precision of the later stages is decorative.

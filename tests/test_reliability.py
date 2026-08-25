@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from career.cards import Card, Evidence
-from career.reliability import analyse, band
+from career_evidence.cards import Card, Evidence
+from career_evidence.reliability import analyse, band
 
 
 def card(claim, source, quote, skills, diff=3, conf=0.8, kind="capability"):

@@ -1,12 +1,12 @@
 ---
-name: reliability-check
+name: career-evidence-reliability
 description: Measure whether repeated deep-read runs on the same pack produce the same cards. Use when asked how reliable or reproducible the extraction is, before trusting a profile, or after changing the deep-read instructions. Produces a number for the pipeline's largest unmeasured unknown.
 ---
 
 # Reliability check
 
 Every claim this pipeline makes is traceable. That is not the same as
-reproducible. `deep-read` is a sampled model pass: run it twice on the same
+reproducible. `career-evidence-read` is a sampled model pass: run it twice on the same
 pack and you get two card sets, and everything downstream inherits whatever
 that variance is. This measures it.
 
@@ -27,16 +27,16 @@ read the previous run's file "just to check the format".
 1. **Pick one pack** and keep it fixed: `workspace/04_packs/pack-01.md`.
    Three runs is the useful minimum; five is better if the pack is short.
 
-2. **Run `deep-read` N times**, writing to separate files and clearing
+2. **Run `career-evidence-read` N times**, writing to separate files and clearing
    context between each:
 
    ```
    /clear
-   /deep-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run1.jsonl
+   /career-evidence-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run1.jsonl
    /clear
-   /deep-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run2.jsonl
+   /career-evidence-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run2.jsonl
    /clear
-   /deep-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run3.jsonl
+   /career-evidence-read workspace/04_packs/pack-01.md   → write cards to workspace/rel/run3.jsonl
    ```
 
    Follow the deep-read contract exactly each time. Do not try to be
@@ -46,7 +46,7 @@ read the previous run's file "just to check the format".
 3. **Analyse:**
 
    ```bash
-   python3 -m career reliability workspace/rel/run*.jsonl --year 2026
+   career-evidence reliability workspace/rel/run*.jsonl --year 2026
    ```
 
 ## Reading the output

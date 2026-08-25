@@ -16,7 +16,7 @@
 
 ## 二、问题从哪来：从卡片图里挖，不是让模型想
 
-`career questions` 的候选**全部由确定性规则产生**，每个都挂着触发它的卡片 id，
+`career-evidence questions` 的候选**全部由确定性规则产生**，每个都挂着触发它的卡片 id，
 所以你能看见"它为什么问我这个"。
 
 | 类型 | 触发条件 | 权重 |
@@ -59,8 +59,8 @@
 
 ## 四、回答如何回流
 
-`career answers` 把回答变成卡片，`source: "interview"`，quote 是**你的原话**
-（所以 `career verify` 一样能核对）。
+`career-evidence answers` 把回答变成卡片，`source: "interview"`，quote 是**你的原话**
+（所以 `career-evidence verify` 一样能核对）。
 
 这里有条必须守住的规则，否则整个证据层会被污染：
 
@@ -73,7 +73,7 @@
 原本的规则是"≥2 个独立来源 = pattern"。但考虑这种情况：
 
 - 你在推文里说"我把 ETL 从 6 小时优化到 40 分钟"（→ `self_concept` 卡片，来源 `x-post.md`）
-- 访谈里你又说了一遍（→ 卡片，来源 `interview`）
+- 访谈里你又说了一遍（→ 卡片，来源 `career-evidence-interview`）
 
 **按来源数它是 2，按证人数它是 1。** 同一个人在两个地方说了同一件事，被系统认证成了"模式"。
 
@@ -90,10 +90,10 @@
 画像是整条链上**最危险的产物**——它是会被贴进简历的那部分，
 也是语言模型最乐意"润色"成恭维话的那部分。三重机制对抗这个压力：
 
-**1. 给骨架，不给白纸。** `career profile` 用 Python 决定**什么能写**：
+**1. 给骨架，不给白纸。** `career-evidence profile` 用 Python 决定**什么能写**：
 只有 pattern 主题能进证据段。写作阶段填文字，不选结论。
 
-**2. 强制引用。** 证据段里每一句断言都必须带卡片 id，`career profile --check` 校验
+**2. 强制引用。** 证据段里每一句断言都必须带卡片 id，`career-evidence profile --check` 校验
 每个 id 存在、属于 pattern 主题、且不是自述卡片。**无引用的断言是错误，不是风格问题。**
 
 **3. 四个段落不能互相借用可信度：**
@@ -113,7 +113,7 @@
 
 ## 七、机器管什么，skill 管什么
 
-**代码强制**（`career profile --check`）：段落齐全、引用存在且合法、
+**代码强制**（`career-evidence profile --check`）：段落齐全、引用存在且合法、
 自述不得充当证据、单一来源不得进证据段、空白段不得为空、人格特质用语直接判错。
 
 **skill 负责判断**（写不进代码的）：证据支持多大的说法就写多大、
@@ -127,22 +127,22 @@
 ## 八、完整流程
 
 ```bash
-python3 -m career questions --year 2026    # ⑥ 挖问题
-# 在 CLI 里跑 /interview，它会重写措辞并逐个问
-python3 -m career answers --file answers.jsonl
-python3 -m career profile                  # ⑤ 生成骨架
-# 在 CLI 里跑 /profile 写正文
-python3 -m career profile --check workspace/09_profile.md
+career-evidence questions --year 2026    # ⑥ 挖问题
+# 在 CLI 里跑 /career-evidence-interview，它会重写措辞并逐个问
+career-evidence answers --file answers.jsonl
+career-evidence profile                  # ⑤ 生成骨架
+# 在 CLI 里跑 /career-evidence-profile 写正文
+career-evidence profile --check workspace/09_profile.md
 ```
 
 
 ---
 
-# 附：信度测量（`career reliability`）
+# 附：信度测量（`career-evidence reliability`）
 
 ## 它补的是什么洞
 
-这条流水线的每条断言都可追溯，但**可追溯不等于可复现**。`deep-read` 是一次采样的模型调用，
+这条流水线的每条断言都可追溯，但**可追溯不等于可复现**。`career-evidence-read` 是一次采样的模型调用，
 同一个 pack 跑两遍会得到两套卡片——差多少，此前没人知道，包括我。
 下游所有精度都继承这个方差，所以在拿到这个数字之前，后面各阶段的精细设计都是装饰。
 

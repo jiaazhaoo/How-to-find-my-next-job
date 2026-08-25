@@ -6,7 +6,7 @@ it already happened -- `scan` -> `redact` -> `triage` -> packs.
 
 Why so strict: the redaction gate is only a gate if there is one way in. A
 connector that streamed a Notion page or a chat log straight into a prompt
-would be a second route to the model that bypasses `career.redact` entirely,
+would be a second route to the model that bypasses `career_evidence.redact` entirely,
 and the whole fail-closed guarantee would be theatre. Staging also makes runs
 reproducible (re-run `prep` without re-fetching) and matches reality: most of
 these platforms only offer bulk export anyway.
@@ -48,7 +48,7 @@ class Connector:
     description = ""
 
     def available(self, config: dict | None = None) -> tuple[bool, str]:
-        """(usable?, one-line explanation shown by `career connectors`).
+        """(usable?, one-line explanation shown by `career-evidence connectors`).
 
         Takes the connector's config because some sources are only reachable
         once the user says where they unzipped the export.

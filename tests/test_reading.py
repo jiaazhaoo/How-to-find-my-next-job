@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from career import triage
-from career.cards import Card, CardError, Evidence, cluster, load, tensions, validate, verify_quotes
-from career.ingest import Document, scan
+from career_evidence import triage
+from career_evidence.cards import Card, CardError, Evidence, cluster, load, tensions, validate, verify_quotes
+from career_evidence.ingest import Document, scan
 
 DECISION_DOC = """# ADR-007 迁移方案
 ## 背景

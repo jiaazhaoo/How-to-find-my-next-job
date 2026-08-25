@@ -4,7 +4,7 @@ Notion is where people keep everything, which is exactly the problem: the same
 workspace holds design docs, meeting notes, a reading list and a grocery run.
 So this connector does two jobs beyond reading files -- it undoes Notion's
 export cosmetics (32-hex id suffixes on every filename and title, CSV database
-dumps), and it applies `career.relevance` so the grocery run does not consume
+dumps), and it applies `career_evidence.relevance` so the grocery run does not consume
 read-pack budget.
 
 Point `path` at the unzipped export. Nothing talks to Notion's API: an export

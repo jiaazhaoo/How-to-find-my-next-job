@@ -44,7 +44,7 @@ if leftovers:
 
 **3. vault 是皇冠上的宝石。** `workspace/vault/aliases.json` 是唯一能把别名还原成真名的文件，
 权限 0600，已在 `.gitignore`。它比原始材料更敏感——它把全部人物表集中在了一个文件里。
-`python -m career restore` 只在本地用它把最终报告读回真名。
+`career-evidence restore` 只在本地用它把最终报告读回真名。
 
 ### 检测规则
 
@@ -76,7 +76,7 @@ if leftovers:
 2. `pseudonymize_git_identities` —— 自动收割 git 历史里所有同事的姓名与邮箱（默认开）。
 3. Presidio（可选）—— NER 识别人名/机构/地点，能兜住散落在正文里的名字。
 
-所以 `redaction-review` 这个 skill 存在的意义是：**强制你亲眼看一遍第一个 pack**。
+所以 `career-evidence-redaction` 这个 skill 存在的意义是：**强制你亲眼看一遍第一个 pack**。
 自动化负责规模，人负责那些机器不可能知道的东西。
 
 ---
@@ -104,7 +104,7 @@ fixture 上的实测：46 个文件 → 保留 3 个（422KB → 1KB，0.3%）�
 
 ### 分诊：什么叫"高信号"
 
-得分由四部分构成（见 `career/triage.py`）：
+得分由四部分构成（见 `career_evidence/triage.py`）：
 
 - **文档类别先验**：ADR / RFC / 复盘 (×3.0) > 报告 (×2.6) > README (×2.4) > 源码 (×1.0) > 测试 (×0.5) > 配置 (×0.35)。
 - **判断语言密度**：中英双语标记——`因为/权衡/取舍/放弃了/根因/教训` / `because/trade-off/instead of/root cause`。
@@ -143,7 +143,7 @@ fixture 上的实测：46 个文件 → 保留 3 个（422KB → 1KB，0.3%）�
 
 三条机制让它保持诚实：
 
-1. **引用必须真实存在。** `python -m career verify` 逐条把 quote 拿回模型当时看到的摘录里比对。
+1. **引用必须真实存在。** `career-evidence verify` 逐条把 quote 拿回模型当时看到的摘录里比对。
    fixture 里那张编造的"独立完成三地容灾演练"卡片，被当场抓出来。
 2. **禁止人格推断。** claim 里出现"内向/性格/完美主义/MBTI"直接判为校验错误。
    理由不是价值观，是信度：2025 年的实证研究里，LLM 从真实对话推断大五人格，
@@ -154,7 +154,7 @@ fixture 上的实测：46 个文件 → 保留 3 个（422KB → 1KB，0.3%）�
 
 ### 矛盾就是问题
 
-`python -m career themes` 除了聚类，还输出 `tensions`——记录里自相矛盾的地方：
+`career-evidence themes` 除了聚类，还输出 `tensions`——记录里自相矛盾的地方：
 
 ```
 ? 在自研 vs 采购的决策中主张自研，依据是三年 TCO 差 2.4 倍
@@ -259,7 +259,7 @@ Codex 的格式跨版本改过多次，所以解析器是**形状容忍**而不�
 你说这两个都是"啥都放/啥都写"——所以它们的难点不是接入，是**分离**，而且是脱敏解决不了的那种分离：
 一份购物清单里没有可脱敏的标识符，也没有敏感话题，它只是**不构成证据**。
 
-所以加了一层 `career/relevance.py`：
+所以加了一层 `career_evidence/relevance.py`：
 
 > **这是分诊辅助，不是隐私控制。** 别混为一谈——`redact` 决定什么**能**发出去，
 > 它只决定什么**值得**发出去。这边漏判代价是少一点覆盖，闸门漏判代价是泄露凭据。
@@ -326,7 +326,7 @@ Basic（$200/月）已下线、Pro 不再接受新签。读自己的账号数据
 Notion --(MCP, 在 CLI 里)--> agent 上下文 --> staging 文件 --> redact --> 模型
 ```
 
-这就是 `import-notion` skill 加上 `career stage` 命令做的事。`stage` 吃一份 JSONL，
+这就是 `career-evidence-notion` skill 加上 `career-evidence stage` 命令做的事。`stage` 吃一份 JSONL，
 套上和内置连接器完全一样的 header、跑同样的 relevance 打分、写同样的 provenance——
 agent 只负责取，格式和策略仍然在有测试覆盖的代码里。
 
@@ -350,11 +350,11 @@ git 在每一次提交的时候就把答案记下来了。作者身份是**测�
 一个靠仓库名猜的 agent 会漏掉你 fork 之后所有工作都做在里面的那个，
 又会信心十足地把你 clone 过一次的教程算成你的作品。而 `git shortlog -sne` 一遍就给出确切答案。
 
-所以 `career init` 会去 `~/code`、`~/dev`、`~/Developer`、`~/projects`、`~/src`、`~/repos`、
+所以 `career-evidence init` 会去 `~/code`、`~/dev`、`~/Developer`、`~/projects`、`~/src`、`~/repos`、
 `~/work`、`~/Documents`（`~` 只扫一层，它是兜底不是主战场）里找 git 仓库，
 对每个跑一次 shortlog，按你的提交数排序，把提交数 ≥3 的写进 `sources`。
 
-`career repos` 把证据摊开给你看：
+`career-evidence repos` 把证据摊开给你看：
 
 ```
    commits  yours authors  last        path
@@ -404,7 +404,7 @@ git 在每一次提交的时候就把答案记下来了。作者身份是**测�
 被问到这个问题时我意识到，配置负担最大的一项跟 MCP 根本无关——
 我让你手填 `authors`，而 `git config user.name` 早就知道答案。这是纯粹的偷懒。
 
-现在 `career init` 会：从 git config 读身份、在 `~/Downloads` / `~/Desktop` / `~/Documents`
+现在 `career-evidence init` 会：从 git config 读身份、在 `~/Downloads` / `~/Desktop` / `~/Documents`
 里按**形状**找导出（X 归档看 `data/tweets.js`，Notion 导出看文件名上那串 32 位 hex）、
 探测会话日志目录，然后把能填的都填好。
 

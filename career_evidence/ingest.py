@@ -193,7 +193,7 @@ def staged_source_type(path: Path) -> str:
     """Imported material carries its connector's type; disk material is "file".
 
     Read from the file's own header first, so anything staged by an agent
-    through `career stage` classifies the same as a built-in connector's
+    through `career-evidence stage` classifies the same as a built-in connector's
     output without needing an entry in the registry.
 
     Downstream this drives a separate budget quota, because a year of chat

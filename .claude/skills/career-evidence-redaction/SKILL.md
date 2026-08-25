@@ -1,6 +1,6 @@
 ---
-name: redaction-review
-description: Audit what the redaction gate produced before any of it reaches a model or leaves the machine. Use after `python -m career prep`, when redaction-report.json needs reviewing, or when the user asks whether their material is safe to share with an AI.
+name: career-evidence-redaction
+description: Audit what the redaction gate produced before any of it reaches a model or leaves the machine. Use after `career-evidence prep`, when redaction-report.json needs reviewing, or when the user asks whether their material is safe to share with an AI.
 ---
 
 # Redaction review
@@ -14,8 +14,8 @@ sensitive*. That is what this review is for, and it needs a human.
 ## Run the audit
 
 ```bash
-python -m career doctor        # which scanners are actually installed
-python -m career prep -v       # writes workspace/redaction-report.json
+career-evidence doctor        # which scanners are actually installed
+career-evidence prep -v       # writes workspace/redaction-report.json
 ```
 
 `redaction-report.json` contains no plaintext by design — labels, rule names,
@@ -66,7 +66,7 @@ session, but it must still be visibly removed rather than quietly kept.
 maps aliases back to real names and must be mode 0600 and gitignored. It is
 the one file in the workspace that is *more* sensitive than the originals,
 because it is the whole cast list in one place. Never commit it, never upload
-it, never paste it. `python -m career restore` uses it locally to read a
+it, never paste it. `career-evidence restore` uses it locally to read a
 finished report with real names.
 
 ## Reporting back

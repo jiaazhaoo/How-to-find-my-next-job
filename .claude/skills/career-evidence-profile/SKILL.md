@@ -1,6 +1,6 @@
 ---
-name: profile
-description: Write the career profile from workspace/08_skeleton.json, then validate it with `career profile --check`. Use only after cards, themes and ideally the interview exist. Every claim must cite the cards that back it.
+name: career-evidence-profile
+description: Write the career profile from workspace/08_skeleton.json, then validate it with `career-evidence profile --check`. Use only after cards, themes and ideally the interview exist. Every claim must cite the cards that back it.
 ---
 
 # Write the profile
@@ -60,7 +60,7 @@ becomes "seasoned migration architect".
 Run it and fix every error:
 
 ```bash
-python3 -m career profile --check workspace/09_profile.md
+career-evidence profile --check workspace/09_profile.md
 ```
 
 ## Rules the validator cannot enforce

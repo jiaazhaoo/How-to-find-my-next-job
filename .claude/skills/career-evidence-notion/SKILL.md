@@ -1,5 +1,5 @@
 ---
-name: import-notion
+name: career-evidence-notion
 description: Import Notion pages into the career pipeline's staging directory using this session's Notion MCP connector, so no manual export is needed. Use when the user asks to import Notion, or when connectors['notion-export'].path is unset but Notion MCP tools are available.
 ---
 
@@ -38,8 +38,8 @@ negotiable:
    shown; a tidied-up page silently breaks that check, and a summarised one
    makes it impossible to tell your words from the user's.
 2. **Do not filter by judgement.** You will be tempted to skip pages that look
-   personal or trivial. Don't — `career stage` scores every page with
-   `career.relevance` and reports the distribution, which is tunable and
+   personal or trivial. Don't — `career-evidence stage` scores every page with
+   `career_evidence.relevance` and reports the distribution, which is tunable and
    auditable. Your taste is neither.
 3. **Do not fetch what wasn't asked for.** Default to the user's own pages.
    Shared team spaces contain other people's material and other people did not
@@ -66,7 +66,7 @@ negotiable:
 5. **Stage it:**
 
    ```bash
-   python3 -m career stage --connector notion-mcp --source-type notes --file /path/to/pages.jsonl
+   career-evidence stage --connector notion-mcp --source-type notes --file /path/to/pages.jsonl
    ```
 
    Add `--append` if you are importing in batches; without it the folder is
@@ -77,8 +77,8 @@ negotiable:
    and mention `--min-relevance` rather than silently importing almost
    nothing.
 
-7. **Point at the next step**: `python3 -m career scan && python3 -m career prep`,
-   then `/redaction-review` before anything goes further.
+7. **Point at the next step**: `career-evidence scan && career-evidence prep`,
+   then `/career-evidence-redaction` before anything goes further.
 
 ## Scale
 

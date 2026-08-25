@@ -19,6 +19,18 @@ from pathlib import Path
 
 from .config import Config
 
+def cli() -> str:
+    """How to invoke ourselves.
+
+    The console script only exists after `pip install -e .`, and the very
+    first thing anyone hits is a command that is not on PATH. Fall back to the
+    module form, which works from a clone with nothing installed.
+    """
+    import shutil
+
+    return "career-evidence" if shutil.which("career-evidence") else "python3 -m career_evidence"
+
+
 AUTO = "auto"        # the driver can do this itself
 HUMAN = "human"      # needs you, or needs a model pass in your CLI
 DONE = "done"
@@ -66,18 +78,18 @@ def next_step(cfg: Config, config_path: Path) -> Step:
     """The single next thing to do. Order matters; first match wins."""
     if not config_path.exists():
         return Step("init", AUTO, "建立配置", "自动探测身份、你提交过的仓库、已下载的导出",
-                    "python3 -m career init")
+                    f"{cli()} init")
 
     if not cfg.authors:
         return Step("authors", HUMAN, "填 authors",
-                    "git 身份和实际提交者常常不一致。跑 `career repos` 看仓库里的提交者是谁，"
+                    "git 身份和实际提交者常常不一致。跑 `career-evidence repos` 看仓库里的提交者是谁，"
                     "把你的那一行填进 config 的 authors。")
 
     staged = (cfg.staging_root.exists() and any(cfg.staging_root.glob("*/*.md"))) \
         or _has(cfg.ws / ".nochat")
     if not staged and not cfg.sources:
         return Step("sources", HUMAN, "指定材料",
-                    "没有仓库也没有导入的材料。`career repos --write` 可以自动填仓库，"
+                    "没有仓库也没有导入的材料。`career-evidence repos --write` 可以自动填仓库，"
                     "或手工把目录加进 config 的 sources。")
 
     if _terms_untouched(cfg):
@@ -98,17 +110,17 @@ def next_step(cfg: Config, config_path: Path) -> Step:
             return Step("connect", HUMAN, "没有可导入的会话日志",
                         "找不到任何本地 AI 会话。没有也能继续——"
                         f"直接 `touch {cfg.ws}/.nochat` 跳过这一步，"
-                        "或者用 `career connectors` 看怎么接。")
+                        "或者用 `career-evidence connectors` 看怎么接。")
         return Step("connect", AUTO, "导入会话日志",
                     f"可用的来源：{', '.join(usable)}",
-                    "; ".join(f"python3 -m career connect {n}" for n in usable))
+                    "; ".join(f"{cli()} connect {n}" for n in usable))
 
     if not _has(cfg.manifest_path):
-        return Step("scan", AUTO, "扫描", "建立文件清单", "python3 -m career scan")
+        return Step("scan", AUTO, "扫描", "建立文件清单", f"{cli()} scan")
 
     if not (cfg.packs_dir.exists() and any(cfg.packs_dir.glob("pack-*.md"))):
         return Step("prep", AUTO, "脱敏 + 分诊 + 生成 read pack",
-                    "这一步之后才有东西可以给模型看", "python3 -m career prep -v")
+                    "这一步之后才有东西可以给模型看", f"{cli()} prep -v")
 
     if not _has(cfg.ws / ".reviewed"):
         packs = sorted(cfg.packs_dir.glob("pack-*.md"))
@@ -116,39 +128,39 @@ def next_step(cfg: Config, config_path: Path) -> Step:
                     f"打开 {packs[0]} 找机器不可能知道的东西：正文里的同事名、"
                     f"项目代号、内部链接。找到就加进 sensitive_terms 重跑 prep。"
                     f"确认没问题后 `touch {cfg.ws}/.reviewed`。",
-                    "/redaction-review")
+                    "/career-evidence-redaction")
 
     if _count_lines(cfg.cards_path) == 0:
         packs = sorted(cfg.packs_dir.glob("pack-*.md"))
         return Step("deep-read", HUMAN, "深读，产出证据卡片",
                     f"{len(packs)} 个 pack 要读。这一步必须模型来做。",
-                    f"/deep-read {packs[0]}")
+                    f"/career-evidence-read {packs[0]}")
 
     if not _has(cfg.themes_path):
         return Step("themes", AUTO, "核对引用 + 聚类",
                     "确认每条引用真实存在，然后归并成主题",
-                    "python3 -m career verify; python3 -m career themes")
+                    f"{cli()} verify; {cli()} themes")
 
     if not _has(cfg.questions_path):
         return Step("questions", AUTO, "生成该问你的问题",
-                    "从卡片图里挖矛盾点和空白", "python3 -m career questions")
+                    "从卡片图里挖矛盾点和空白", f"{cli()} questions")
 
     if _count_lines(cfg.answers_path) == 0:
         return Step("interview", HUMAN, "回答问题",
                     "这是整条链上唯一产生新信息的一步——作品能证明你擅长什么，"
-                    "永远证明不了你还想不想做。", "/interview")
+                    "永远证明不了你还想不想做。", "/career-evidence-interview")
 
     if not _has(cfg.skeleton_path):
         return Step("skeleton", AUTO, "算出什么能写进画像",
                     "只有 ≥2 个独立来源且有工件支撑的主题够格",
-                    "python3 -m career profile")
+                    f"{cli()} profile")
 
     if not _has(cfg.profile_path):
         return Step("write", HUMAN, "写画像",
-                    "从骨架写正文，每句断言挂卡片 id", "/profile")
+                    "从骨架写正文，每句断言挂卡片 id", "/career-evidence-profile")
 
     return Step("check", AUTO, "校验画像", "每条引用必须存在、合法、不是自述",
-                f"python3 -m career profile --check {cfg.profile_path}")
+                f"{cli()} profile --check {cfg.profile_path}")
 
 
 def progress(cfg: Config, config_path: Path) -> list[tuple[str, str]]:

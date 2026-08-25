@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from career import rules
-from career.redact import Redactor, RedactionError, Vault
+from career_evidence import rules
+from career_evidence.redact import Redactor, RedactionError, Vault
 
 
 def synth(*parts: str) -> str:

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
-from career.config import TEMPLATE, Config
-from career.driver import HUMAN, next_step, progress
+from career_evidence.config import TEMPLATE, Config
+from career_evidence.driver import HUMAN, next_step, progress
 
 
 class TestNextStep(unittest.TestCase):
@@ -97,7 +98,7 @@ class TestConfigScope(unittest.TestCase):
     whichever folder happens to be open."""
 
     def test_a_project_local_config_wins_when_present(self):
-        from career.config import LOCAL_CONFIG_PATH, USER_CONFIG_PATH, resolve_config_path
+        from career_evidence.config import LOCAL_CONFIG_PATH, USER_CONFIG_PATH, resolve_config_path
 
         cwd = os.getcwd()
         root = Path(tempfile.mkdtemp())
@@ -111,7 +112,7 @@ class TestConfigScope(unittest.TestCase):
             os.chdir(cwd)
 
     def test_explicit_config_beats_both(self):
-        from career.config import resolve_config_path
+        from career_evidence.config import resolve_config_path
 
         self.assertEqual(resolve_config_path("/x/y.json"), Path("/x/y.json"))
 
@@ -139,6 +140,48 @@ class TestConfigScope(unittest.TestCase):
         data.update({"authors": ["Me"], "workspace": "workspace"})
         config.write_text(json.dumps(data), "utf-8")
         self.assertEqual(Config.load(config).ws, root / "workspace")
+
+
+class TestPackaging(unittest.TestCase):
+    """The rename broke the install twice, in ways nothing here would catch:
+    a package list still naming the old directory, and an entry point still
+    named `career`. Both are one-line declarations no test looked at."""
+
+    def setUp(self):
+        self.pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml")
+        self.text = self.pyproject.read_text("utf-8")
+
+    def test_every_declared_package_exists(self):
+        root = self.pyproject.parent
+        declared = re.findall(r'"([a-z_][a-z_.]*)"', 
+                              re.search(r"packages\s*=\s*\[(.*?)\]", self.text,
+                                        re.S).group(1))
+        self.assertTrue(declared)
+        for name in declared:
+            path = root / Path(*name.split("."))
+            self.assertTrue((path / "__init__.py").exists(), f"{name} 不存在于 {path}")
+
+    def test_the_entry_point_matches_the_package(self):
+        entry = re.search(r'\[project\.scripts\]\s*\n\s*"?([\w-]+)"?\s*=\s*"([\w.]+):(\w+)"',
+                          self.text)
+        self.assertIsNotNone(entry, "找不到 console script 声明")
+        _, module, func = entry.groups()
+        mod = __import__(module.rsplit(":", 1)[0], fromlist=[func])
+        self.assertTrue(callable(getattr(mod, func)))
+
+    def test_the_driver_falls_back_when_the_script_is_absent(self):
+        """The first thing anyone hits is a command that is not on PATH."""
+        import shutil
+        from career_evidence import driver
+
+        real = shutil.which
+        try:
+            shutil.which = lambda name: None
+            self.assertEqual(driver.cli(), "python3 -m career_evidence")
+            shutil.which = lambda name: "/usr/local/bin/career-evidence"
+            self.assertEqual(driver.cli(), "career-evidence")
+        finally:
+            shutil.which = real
 
 
 class TestProgress(unittest.TestCase):

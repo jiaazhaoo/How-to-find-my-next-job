@@ -11,7 +11,7 @@ from pathlib import Path
 # folder to analyse all the others was backwards. The data lives in one place
 # under HOME; a project-local config still wins when there is one, which is
 # what makes developing this tool on itself possible.
-USER_HOME_DIR = Path("~/.career").expanduser()
+USER_HOME_DIR = Path("~/.career-evidence").expanduser()
 LOCAL_CONFIG_PATH = Path("config/sources.json")
 USER_CONFIG_PATH = USER_HOME_DIR / "sources.json"
 DEFAULT_CONFIG_PATH = LOCAL_CONFIG_PATH        # kept for callers passing paths
@@ -103,7 +103,7 @@ class Config:
     def ws(self) -> Path:
         """Relative workspaces resolve against the config file, not the shell.
 
-        Otherwise `career run` from a different directory would look for its
+        Otherwise `career-evidence run` from a different directory would look for its
         own output somewhere else and quietly start over.
         """
         raw = Path(self.workspace).expanduser()
