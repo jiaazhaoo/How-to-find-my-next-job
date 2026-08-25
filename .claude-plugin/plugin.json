@@ -1,8 +1,0 @@
-{
-  "name": "career-evidence",
-  "version": "0.1.0",
-  "description": "Build an evidence-backed career profile from your own repositories, documents and AI session logs. Redacts before anything reaches a model, cites every claim, and interviews you about what the artifacts cannot show.",
-  "author": {
-    "name": "Jia Zhao"
-  }
-}
