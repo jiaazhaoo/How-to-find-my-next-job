@@ -7,7 +7,7 @@
 # copy. When the packaging breaks, this still works.
 set -e
 
-src="$(cd "$(dirname "$0")/.." && pwd)/skills"
+src="$(cd "$(dirname "$0")/.." && pwd)/.claude/skills"
 dest="${HOME}/.claude/skills"
 
 [ -d "$src" ] || { echo "找不到技能目录：$src"; exit 1; }

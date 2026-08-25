@@ -734,7 +734,7 @@ def cmd_install_skills(args: argparse.Namespace) -> int:
     """
     import shutil
 
-    source = Path(__file__).resolve().parent.parent / "skills"
+    source = Path(__file__).resolve().parent.parent / ".claude" / "skills"
     if not source.is_dir():
         print(f"找不到技能目录：{source}")
         return 1

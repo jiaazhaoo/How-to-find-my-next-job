@@ -217,6 +217,11 @@ class TestPackaging(unittest.TestCase):
         for plugin in market["plugins"]:
             self.assertTrue((root / plugin["source"]).is_dir())
         # skills must sit where a plugin expects them
+        # Real files under .claude/skills: a cloud Claude Code session clones
+        # the repo and reads that path, and it is not worth betting on whether
+        # its loader follows symlinks. `skills/` is the symlink, for plugins.
+        real = root / ".claude" / "skills" / "career-evidence" / "SKILL.md"
+        self.assertTrue(real.exists() and not real.is_symlink())
         self.assertTrue((root / "skills" / "career-evidence" / "SKILL.md").exists())
 
 
