@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "career-evidence",
+  "name": "how-to-find-my-next-job",
   "version": "0.1.0",
-  "description": "Evidence-based career profiling from your own work",
+  "description": "Jia Zhao 的职业工具集",
   "owner": {
     "name": "Jia Zhao"
   },
