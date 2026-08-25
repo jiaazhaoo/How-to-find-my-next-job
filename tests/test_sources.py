@@ -263,3 +263,50 @@ class TestImportedClassification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTermSuggestion(unittest.TestCase):
+    """Asking "what are your client names?" is a recall task, the hardest kind.
+    The material usually contains the answer; the tool should propose and let
+    the user recognise."""
+
+    def suggest(self, text, authors=("Me",), repos=()):
+        import tempfile
+        from career_evidence.terms import suggest
+        path = Path(tempfile.mkdtemp()) / "doc.md"
+        path.write_text(text, "utf-8")
+        return suggest([path], list(authors), list(repos))
+
+    def test_it_finds_names_by_the_word_that_follows_them(self):
+        found = self.suggest("北极星项目由星辰科技负责，客户：远洋银行。"
+                             "对接 Acme Corp 与 Zephyr Technologies。")
+        terms = {c.term for c in found.candidates}
+        for expected in ("北极星", "星辰", "Acme", "Zephyr"):
+            self.assertIn(expected, terms)
+
+    def test_prose_does_not_become_candidates(self):
+        """A candidate list full of noise is worse than no list."""
+        found = self.suggest("我们决定把这个项目整个迁移，所以关于那个系统的方案，"
+                             "每个平台都要评估一遍，这是同一家公司的两个计划。")
+        self.assertEqual([c.term for c in found.candidates], [])
+
+    def test_internal_hosts_are_flagged(self):
+        found = self.suggest("连接 pay-db.internal:5432 做对账。")
+        self.assertIn("pay-db.internal", {c.term for c in found.candidates})
+
+    def test_a_personal_project_needs_no_question(self):
+        """One committer, no corporate mail, no internal hosts: 'there is no
+        client here' is a finding, not a guess."""
+        found = self.suggest("重构了解析器，把逐行处理换成批量写入，延迟降了一半。")
+        self.assertTrue(found.looks_personal)
+        self.assertEqual(found.candidates, [])
+
+    def test_public_mail_is_not_a_corporate_signal(self):
+        found = self.suggest("联系 me@gmail.com 或 you@qq.com")
+        self.assertTrue(found.looks_personal)
+
+    def test_overlapping_names_collapse(self):
+        found = self.suggest("客户：远洋银行，远洋银行的对账系统。")
+        terms = [c.term for c in found.candidates]
+        self.assertNotIn("远洋", terms)
+        self.assertIn("远洋银行", terms)

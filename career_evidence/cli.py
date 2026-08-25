@@ -10,6 +10,7 @@ from pathlib import Path
 from . import cards as cards_mod
 from . import driver as driver_mod
 from . import interview as interview_mod
+from . import terms as terms_mod
 from . import reliability as reliability_mod
 from . import profile as profile_mod
 from . import pipeline, triage
@@ -349,6 +350,72 @@ def cmd_stage(args: argparse.Namespace) -> int:
         print(f"  unparseable   : {bad} line(s)")
     print(f"  relevance     : " + "  ".join(f"{k}:{v}" for k, v in histogram(scores).items()))
     print(f"\nNext: career-evidence scan")
+    return 0
+
+
+def _gather_terms(cfg: Config):
+    """Scan the actual material for candidate sensitive terms."""
+    from .discover import find_repos
+    from .ingest import EXCLUDED_DIRS
+
+    paths = []
+    for root in cfg.roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in {".md", ".txt", ".py", ".rst"}:
+                continue
+            if any(part in EXCLUDED_DIRS for part in path.parts):
+                continue
+            if "tests" in path.parts or str(cfg.ws) in str(path):
+                continue
+            paths.append(path)
+    repos = find_repos(hints=[str(r) for r in cfg.roots] or None, identity=cfg.authors)
+    return terms_mod.suggest(paths[:500], cfg.authors, repos)
+
+
+def cmd_terms(args: argparse.Namespace) -> int:
+    """Propose sensitive terms rather than asking you to recall them.
+
+    Recall is the hardest thing to ask for, and in the common case the tool
+    already has the evidence: one committer, no corporate mail, no internal
+    hosts means there is nobody to protect. Deciding which candidate is
+    actually confidential stays with the user -- that part is not knowable
+    from the material.
+    """
+    config_path = _config_path(args)
+    cfg = Config.load(config_path)
+    found = _gather_terms(cfg)
+
+    s = found.signals
+    print(f"扫描了 {s['files_scanned']} 个文件、{s['repos_scanned']} 个仓库\n")
+
+    if found.looks_personal and not found.candidates:
+        print("没有发现任何需要保护的东西：")
+        print("  · git 里只有你一个提交者，没有同事的名字")
+        print("  · 没有非公共邮箱域名（没有公司邮箱的痕迹）")
+        print("  · 没有内网域名")
+        print("\n判定为个人项目。")
+        if args.write or args.auto:
+            data = json.loads(config_path.read_text("utf-8"))
+            data["sensitive_terms"] = []
+            config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
+            print(f"已把 sensitive_terms 设为空（之前是模板的示例值）。")
+        return 0
+
+    print(f"找到 {len(found.candidates)} 个候选——**这是让你勾选，不是让你回忆**：\n")
+    for i, c in enumerate(found.candidates, 1):
+        where = f"  见于 {', '.join(c.files[:2])}" if c.files else ""
+        print(f"  {i:2}. [{c.label:14}] {c.term}")
+        print(f"      {c.why}{where}")
+    print(f"\n这些只是候选，机器不知道哪个是保密的——那一步只有你知道。")
+    print(f"确认要保护哪些之后，写进 config 的 sensitive_terms：")
+    print(f'  {{"term": "...", "label": "ORG"}}')
+    if args.write:
+        data = json.loads(config_path.read_text("utf-8"))
+        data["sensitive_terms"] = [{"term": c.term, "label": c.label} for c in found.candidates]
+        config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        print(f"\n--write：已把全部 {len(found.candidates)} 个写入配置。请删掉不该在里面的。")
     return 0
 
 
@@ -697,6 +764,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
     print(f"\n轮到你了：{step.title}\n")
     print(f"  {step.detail}\n")
+    if step.key == "terms":
+        print("  先看看机器能替你找到什么：\n")
+        try:
+            cmd_terms(argparse.Namespace(config=getattr(args, "config", None),
+                                         write=False, auto=False))
+        except (OSError, ValueError) as exc:
+            print(f"  （候选扫描失败：{exc}）")
     if step.command:
         print(f"  → {step.command}")
     print(f"\n做完之后再敲一次 `{driver_mod.cli()} run`，它会接着往下走。")
@@ -836,6 +910,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--min-relevance", type=float, default=0.35)
     s.add_argument("--append", action="store_true")
     s.set_defaults(func=cmd_stage)
+
+    s = sub.add_parser("terms", parents=[common],
+                       help="从材料里找出候选敏感词，让你勾选而不是回忆")
+    s.add_argument("--write", action="store_true", help="把全部候选写进配置（之后自己删）")
+    s.add_argument("--auto", action="store_true",
+                   help="判定为个人项目时自动写空列表，否则只列出候选")
+    s.set_defaults(func=cmd_terms)
 
     s = sub.add_parser("scan", parents=[common], help="stage A: build the manifest")
     s.set_defaults(func=cmd_scan)

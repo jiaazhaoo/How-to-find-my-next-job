@@ -104,10 +104,11 @@ def next_step(cfg: Config, config_path: Path) -> Step:
                     "或手工把目录加进 config 的 sources。")
 
     if _terms_untouched(cfg):
-        return Step("terms", HUMAN, "填 sensitive_terms",
-                    "客户名、项目代号、内部系统名、没出现在 git 里的同事名。"
-                    "这是唯一没有任何扫描器能替你做的事——密钥有规则兜底，客户名没有。"
-                    "确实没有的话，填一个 [] 之外的占位也行，但先想三十秒。")
+        return Step("terms", HUMAN, "确认敏感词",
+                    "机器会先扫一遍材料给出候选，你只需要勾选哪些是真保密的——"
+                    "它认得出模式（XX公司、XX项目、内网域名、git 里的其他提交者），"
+                    "认不出哪个是机密。没有候选且没有公司痕迹时会自动判定为个人项目。",
+                    f"{cli()} terms --auto")
 
     if not staged:
         # Only offer connectors that are actually usable here. A missing Codex
