@@ -1,6 +1,6 @@
 ---
 name: career-evidence-profile
-description: Write the career profile from workspace/08_skeleton.json, then validate it with `career-evidence profile --check`. Use only after cards, themes and ideally the interview exist. Every claim must cite the cards that back it.
+description: "Write the career profile from workspace/08_skeleton.json, then validate it with `career-evidence profile --check`. Use only after cards, themes and ideally the interview exist. Every claim must cite the cards that back it."
 ---
 
 # Write the profile

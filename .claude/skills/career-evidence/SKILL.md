@@ -1,6 +1,6 @@
 ---
 name: career-evidence
-description: Drive the whole career-profiling pipeline from wherever it currently stands. Use when the user wants to start, continue, or check on building their evidence-based career profile, or asks what to do next with this project. Handles the sequencing so they never have to remember which of seventeen commands comes next.
+description: "Drive the whole career-profiling pipeline from wherever it currently stands. Use when the user wants to start, continue, or check on building their evidence-based career profile, or asks what to do next with this project. Handles the sequencing so they never have to remember which of seventeen commands comes next."
 ---
 
 # Drive the pipeline

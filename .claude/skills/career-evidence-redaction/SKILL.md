@@ -1,6 +1,6 @@
 ---
 name: career-evidence-redaction
-description: Audit what the redaction gate produced before any of it reaches a model or leaves the machine. Use after `career-evidence prep`, when redaction-report.json needs reviewing, or when the user asks whether their material is safe to share with an AI.
+description: "Audit what the redaction gate produced before any of it reaches a model or leaves the machine. Use after `career-evidence prep`, when redaction-report.json needs reviewing, or when the user asks whether their material is safe to share with an AI."
 ---
 
 # Redaction review

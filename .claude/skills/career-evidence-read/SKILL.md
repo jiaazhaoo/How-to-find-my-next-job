@@ -1,6 +1,6 @@
 ---
 name: career-evidence-read
-description: Read a redacted read pack and emit verifiable evidence cards. Use when processing workspace/04_packs/pack-NN.md produced by `career-evidence prep`, or whenever asked to extract career evidence from source material. Not for writing a profile — this stage only produces checkable claims with quotes.
+description: "Read a redacted read pack and emit verifiable evidence cards. Use when processing workspace/04_packs/pack-NN.md produced by `career-evidence prep`, or whenever asked to extract career evidence from source material. Not for writing a profile — this stage only produces checkable claims with quotes."
 ---
 
 # Deep read: turn a pack into evidence cards

@@ -1,6 +1,6 @@
 ---
 name: career-evidence-reliability
-description: Measure whether repeated deep-read runs on the same pack produce the same cards. Use when asked how reliable or reproducible the extraction is, before trusting a profile, or after changing the deep-read instructions. Produces a number for the pipeline's largest unmeasured unknown.
+description: "Measure whether repeated deep-read runs on the same pack produce the same cards. Use when asked how reliable or reproducible the extraction is, before trusting a profile, or after changing the deep-read instructions. Produces a number for the pipeline's largest unmeasured unknown."
 ---
 
 # Reliability check

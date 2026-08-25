@@ -207,6 +207,26 @@ class TestPackaging(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("career-evidence", result.stdout)
 
+    def test_every_skill_has_parseable_frontmatter(self):
+        """A malformed description fails silently: the skill simply never
+        appears, with no error anywhere. One of ours had an unquoted
+        `connectors['notion-export'].path` sitting in it."""
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML not installed")
+        root = Path(__file__).resolve().parent.parent / ".claude" / "skills"
+        found = sorted(root.glob("*/SKILL.md"))
+        self.assertTrue(found, "no skills found")
+        for path in found:
+            parts = path.read_text("utf-8").split("---", 2)
+            self.assertEqual(len(parts), 3, f"{path.parent.name}: 缺少 frontmatter")
+            data = yaml.safe_load(parts[1])
+            self.assertIsInstance(data, dict, path.parent.name)
+            self.assertEqual(data.get("name"), path.parent.name,
+                             f"{path.parent.name}: name 与目录名不符")
+            self.assertTrue(data.get("description"), f"{path.parent.name}: 缺 description")
+
     def test_the_plugin_manifests_are_valid(self):
         root = Path(__file__).resolve().parent.parent
         manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text("utf-8"))

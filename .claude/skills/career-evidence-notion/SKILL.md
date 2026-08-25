@@ -1,6 +1,6 @@
 ---
 name: career-evidence-notion
-description: Import Notion pages into the career pipeline's staging directory using this session's Notion MCP connector, so no manual export is needed. Use when the user asks to import Notion, or when connectors['notion-export'].path is unset but Notion MCP tools are available.
+description: "Import Notion pages into the career pipeline's staging directory using this session's Notion MCP connector, so no manual export is needed. Use when the user asks to import Notion, or when connectors['notion-export'].path is unset but Notion MCP tools are available."
 ---
 
 # Import Notion over MCP
