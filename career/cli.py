@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import cards as cards_mod
+from . import driver as driver_mod
 from . import interview as interview_mod
 from . import reliability as reliability_mod
 from . import profile as profile_mod
@@ -627,6 +628,57 @@ def cmd_reliability(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Do every automatic step, stop at the first that needs a person."""
+    import subprocess
+
+    config_path = Path(args.config)
+    try:
+        cfg = Config.load(config_path)
+    except (FileNotFoundError, ValueError):
+        if config_path.exists():
+            raise
+        print("没有配置，先建一个：\n")
+        rc = cmd_init(argparse.Namespace(config=args.config, force=False,
+                                         min_commits=3, max_repos=40))
+        if rc != 0:
+            return rc
+        print()
+        cfg = Config.load(config_path)
+
+    while True:
+        step = driver_mod.next_step(cfg, config_path)
+        if step.kind == driver_mod.HUMAN or args.status:
+            break
+        print(f"▶ {step.title}")
+        for command in step.command.split("; "):
+            result = subprocess.run(command, shell=True)
+            if result.returncode not in (0, 2):   # 2 = findings, not failure
+                print(f"\n  卡在这一步了：{command}")
+                print(f"  贴给我看，别自己调参数——这些数字目前还是拍的。")
+                return 1
+        print()
+
+    print("─" * 60)
+    for name, state in driver_mod.progress(cfg, config_path):
+        mark = "·" if state in ("-", "缺", "未做") else "✓"
+        print(f"  {mark} {name:10} {state}")
+    line = driver_mod.summary(cfg)
+    if line:
+        print(f"\n  {line}")
+
+    print("─" * 60)
+    if step.kind == driver_mod.DONE:
+        print("  全部完成。")
+        return 0
+    print(f"\n轮到你了：{step.title}\n")
+    print(f"  {step.detail}\n")
+    if step.command:
+        print(f"  → {step.command}")
+    print(f"\n做完之后再敲一次 `python3 -m career run`，它会接着往下走。")
+    return 0
+
+
 def cmd_restore(args: argparse.Namespace) -> int:
     cfg = Config.load(Path(args.config))
     vault = Vault.load(cfg.vault_path)
@@ -667,6 +719,11 @@ def build_parser() -> argparse.ArgumentParser:
     # subparser from stomping the global value with its own default.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", default=argparse.SUPPRESS)
+
+    s = sub.add_parser("run", parents=[common],
+                       help="做完所有能自动做的，停在需要你的那一步")
+    s.add_argument("--status", action="store_true", help="只看状态，不执行")
+    s.set_defaults(func=cmd_run)
 
     s = sub.add_parser("init", parents=[common], help="write a config template")
     s.add_argument("--force", action="store_true")

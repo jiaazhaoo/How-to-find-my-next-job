@@ -120,8 +120,11 @@ def detect_sources(config_connectors: dict | None = None) -> dict:
 # a different identity counts, and whether a repo you contributed two commits
 # to belongs in your professional story.
 # --------------------------------------------------------------------------
-REPO_SEARCH_DIRS = ["~/code", "~/dev", "~/develop", "~/Developer", "~/projects", "~/src",
-                    "~/repos", "~/work", "~/git", "~/Documents", "~/Desktop", "~"]
+# "." and its parent come first: if you are running this from inside a
+# repository, that repository is obviously a candidate, and on machines where
+# HOME is not where work lives it may be the only one we can see.
+REPO_SEARCH_DIRS = [".", "..", "~/code", "~/dev", "~/develop", "~/Developer", "~/projects",
+                    "~/src", "~/repos", "~/work", "~/git", "~/Documents", "~/Desktop", "~"]
 
 SKIP_WALK = {"node_modules", "vendor", ".venv", "venv", "Library", "Applications",
              ".Trash", ".cache", "go", ".rustup", ".cargo", "site-packages", ".git"}

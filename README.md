@@ -3,62 +3,52 @@
 Align what you have done with the tide of the times.
 
 把自己的代码库、报告、项目材料交给 AI，让它解构出你的能力画像，再反过来问你几个关键问题。
-这个仓库目前实现了这条链路的**输入层**——也是最容易被做砸、也最决定后面一切可信度的两步：
+整条链路都在了：接入 → 脱敏 → 分诊 → 深读 → 归约 → 提问 → 画像，外加一层信度测量。
+贯穿全程的一条规矩是**每句话都要能被反驳**：断言必须挂着逐字引用，引用由代码核对，
+一处证据只算一次，你自己说的话不算能力证据。
 
-1. **脱敏**：闸门 fail-closed，凭据销毁、身份假名化，别名全语料稳定。
-2. **深读**：四步漏斗把万级文件收敛到百级，模型只在高信号材料上花 token，产出**带引用、可机器校验**的证据卡片。
-
-设计理由与取舍写在 [`docs/input-layer.md`](docs/input-layer.md)。
+设计理由写在 [`docs/input-layer.md`](docs/input-layer.md)（前半段）和
+[`docs/profile-and-interview.md`](docs/profile-and-interview.md)（后半段）。
 
 ## 快速开始
 
-无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。命令是 `python3`，不是 `python`。
+无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。
 
 ```bash
-python -m career init                 # 自动探测身份、你提交过的仓库、会话日志、已下载的导出
-python -m career repos                # 看它凭什么把这些仓库算成你的（每行都是 git 的计数）
-$EDITOR config/sources.json           # 只需补一项：sensitive_terms（客户名/项目代号）
-python -m career doctor               # 检查脱敏工具链和配置
-
-python -m career connectors           # 看有哪些可导入的源
-python -m career connect claude-code  # ⓪ 导入本地 AI 会话日志
-python -m career connect codex        #    另一个助手的会话（覆盖面）
-python -m career connect notion-export
-python -m career connect x-archive
-
-python -m career scan                 # ① 扫描（staging 自动纳入）→ 清单
-python -m career prep -v              # ②③ 脱敏 + 打分 + 选择 + 生成 read pack
+python3 -m career run
 ```
 
-然后在 Claude Code（或任何支持 skill 的 CLI）里：
+就这一个命令。它会做完所有能自动做的事，停在第一个真正需要你的地方，
+然后你再敲一次同样的命令，它接着往下走。
 
-```
-/redaction-review                     # 亲眼过一遍第一个 pack，补 sensitive_terms
-/deep-read workspace/04_packs/pack-01.md
-```
+在 Claude Code 里更简单——直接 `/career`，它替你跑上面这个循环，
+连深读和访谈也一并做了。
+
+**只有三处真的需要你**：填客户名和项目代号（没有扫描器能替你做）、
+亲眼过一遍脱敏结果、回答访谈问题。其余都是自动的。
+
+<details>
+<summary>如果你想手动控制每一步</summary>
 
 ```bash
-python -m career verify               # ④ 每条引用必须真实存在于模型看过的摘录里
-python -m career themes               # ⑤ 聚类：≥2 个独立来源才算 pattern；输出矛盾点
-
-python -m career questions --year 2026 # ⑥ 从卡片图里挖出该问你什么
-# /interview 逐个问 → answers.jsonl
-python -m career answers --file answers.jsonl
-python -m career profile               # ⑦ 骨架：什么能写进画像
-# /profile 写正文
-python -m career profile --check workspace/09_profile.md
-
-# 想知道这一切有多可复现：
-/reliability-check                     # 在干净上下文里跑 N 次 deep-read
-python -m career reliability workspace/rel/run*.jsonl
+python3 -m career init                 # 自动探测身份、你提交过的仓库、已下载的导出
+python3 -m career repos                # 看它凭什么把这些仓库算成你的
+python3 -m career connect claude-code  # 导入会话日志（codex / notion-export / x-archive / web 同理）
+python3 -m career scan                 # 建清单
+python3 -m career prep -v              # 脱敏 + 分诊 + 生成 read pack
+# /redaction-review  → /deep-read
+python3 -m career verify               # 每条引用必须真实存在
+python3 -m career themes               # 聚类，≥2 个独立来源才算 pattern
+python3 -m career questions --year 2026
+# /interview
+python3 -m career answers --file answers.jsonl
+python3 -m career profile              # 骨架
+# /profile
+python3 -m career profile --check workspace/09_profile.md
+python3 -m career reliability workspace/rel/run*.jsonl   # 这一切有多可复现
 ```
 
-单文件临时用：
-
-```bash
-python -m career redact notes.md > safe.md      # 脱敏后再粘给任何 AI
-python -m career restore report.md              # 本地把别名还原成真名
-```
+</details>
 
 ## 输出
 
