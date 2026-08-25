@@ -7,6 +7,14 @@ workspace/
 # file is tracked.
 config/sources.json
 
+# Build artefacts. These were committed by a `git add -A` and then blocked
+# everyone else's `git pull`, because pip regenerates them locally and git
+# saw the incoming deletion as a conflict.
+*.egg-info/
+build/
+dist/
+.eggs/
+
 __pycache__/
 *.py[cod]
 .venv/
