@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from career_evidence.config import TEMPLATE, Config
-from career_evidence.driver import HUMAN, next_step, progress
+from career_evidence.driver import AUTO, HUMAN, next_step, progress
 
 
 class TestNextStep(unittest.TestCase):
@@ -17,6 +17,7 @@ class TestNextStep(unittest.TestCase):
         self.config_path = self.root / "sources.json"
 
     def cfg(self, **overrides) -> Config:
+        (self.root / "repo").mkdir(exist_ok=True)   # sources must actually exist
         data = json.loads(json.dumps(TEMPLATE))
         data.update({"sources": [str(self.root / "repo")], "authors": ["Me"],
                      "workspace": str(self.root / "workspace"),
@@ -40,16 +41,20 @@ class TestNextStep(unittest.TestCase):
         self.assertEqual(step.key, "authors")
         self.assertEqual(step.kind, HUMAN)
 
-    def test_template_sample_terms_do_not_satisfy_the_gate(self):
-        """A gate a placeholder can walk through is not a gate. The template
-        ships with example terms and they passed the original check."""
+    def test_template_sample_terms_still_trigger_the_scan(self):
+        """A placeholder must not read as a configured answer -- it means the
+        step has not run, not that there is nothing to protect."""
         step = next_step(self.cfg(sensitive_terms=TEMPLATE["sensitive_terms"]),
                          self.config_path)
         self.assertEqual(step.key, "terms")
 
-    def test_no_terms_at_all_also_stops(self):
-        self.assertEqual(next_step(self.cfg(sensitive_terms=[]), self.config_path).key,
-                         "terms")
+    def test_finding_terms_is_automatic_not_a_question(self):
+        """Over-redacting costs a few aliases; under-redacting leaks a client
+        name. A question whose safe answer is always 'all of them' is not a
+        question."""
+        step = next_step(self.cfg(sensitive_terms=[]), self.config_path)
+        self.assertEqual(step.key, "terms")
+        self.assertEqual(step.kind, AUTO)
 
     def test_real_terms_let_it_through(self):
         self.assertNotEqual(next_step(self.cfg(), self.config_path).key, "terms")
@@ -71,11 +76,13 @@ class TestNextStep(unittest.TestCase):
 
     def test_no_chat_logs_is_not_a_dead_end(self):
         """A missing Codex means "you do not use Codex", not a failure."""
-        step = next_step(self.cfg(connectors={}), self.config_path)
+        step = next_step(self.cfg(connectors={}, sensitive_terms=[{"term": "X"}]),
+                         self.config_path)
         self.assertIn(step.key, ("connect", "scan"))
         self.touch(".nochat")
-        self.assertNotEqual(next_step(self.cfg(connectors={}), self.config_path).key,
-                            "connect")
+        self.assertNotEqual(
+            next_step(self.cfg(connectors={}, sensitive_terms=[{"term": "X"}]),
+                      self.config_path).key, "connect")
 
     def test_the_order_is_stable_all_the_way_down(self):
         cfg = self.cfg()
@@ -91,6 +98,22 @@ class TestNextStep(unittest.TestCase):
         seen.append(next_step(cfg, self.config_path).key)
         self.assertEqual(seen, ["connect", "scan", "prep", "review", "deep-read", "themes",
                                 "questions", "interview", "skeleton", "write", "check"])
+
+    def test_only_three_steps_ever_need_a_person(self):
+        """Everything else is sequencing, which is complexity we added."""
+        cfg = self.cfg()
+        human = set()
+        artefacts = [("00_staging/claude-code/s.md", "x"), ("01_manifest.jsonl", '{"id":"a"}'),
+                     ("04_packs/pack-01.md", "p"), (".reviewed", "x"),
+                     ("05_cards.jsonl", '{"claim":"c"}'), ("06_themes.json", "{}"),
+                     ("07_questions.json", "{}"), ("07_answers.jsonl", '{"a":1}'),
+                     ("08_skeleton.json", "{}"), ("09_profile.md", "text")]
+        for rel, body in artefacts:
+            step = next_step(cfg, self.config_path)
+            if step.kind == HUMAN:
+                human.add(step.key)
+            self.touch(rel, body)
+        self.assertEqual(human, {"deep-read", "interview", "write"})
 
 
 class TestConfigScope(unittest.TestCase):
