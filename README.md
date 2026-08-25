@@ -12,17 +12,31 @@ Align what you have done with the tide of the times.
 
 ## 快速开始
 
-无依赖，Python 3.9+（macOS 自带的就够），全程本地运行。
+在 Claude Code 里一行装好，不用 clone、不用 pip：
+
+```
+/plugin marketplace add jiaazhaoo/How-to-find-my-next-job
+/plugin install career-evidence@career-evidence
+```
+
+然后 `/career-evidence`。Python 代码跟着插件走，按路径调用，**没有任何安装步骤会失败**。
+
+<details>
+<summary>从源码用（开发这个工具本身，或者不想走插件）</summary>
 
 ```bash
 git clone -b claude/career-profile-assessment-t4xmll \
   https://github.com/jiaazhaoo/How-to-find-my-next-job.git
 cd How-to-find-my-next-job
-pip install -e .                            # career-evidence 命令进 PATH
-./scripts/install-skills.sh                 # /career-evidence 在任意目录可用
 
-career-evidence run                         # 在哪都能跑
+./scripts/career-evidence run     # 零安装，直接跑
+./scripts/install-skills.sh       # /career-evidence 在任意目录可用
+
+# 可选：装进 PATH
+pip install -e . && career-evidence run
 ```
+
+</details>
 
 就这一个命令。它会做完所有能自动做的事，停在第一个真正需要你的地方，
 然后你再敲一次同样的命令，它接着往下走。

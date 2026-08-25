@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "career-evidence",
+  "version": "0.1.0",
+  "description": "Evidence-based career profiling from your own work",
+  "owner": {
+    "name": "Jia Zhao"
+  },
+  "plugins": [
+    {
+      "name": "career-evidence",
+      "description": "Redact, then read deeply: build a career profile where every claim carries the quote that backs it, and get interviewed about what your artifacts cannot show.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

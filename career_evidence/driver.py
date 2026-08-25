@@ -20,15 +20,26 @@ from pathlib import Path
 from .config import Config
 
 def cli() -> str:
-    """How to invoke ourselves.
+    """How to invoke ourselves, in order of what is most likely to exist.
 
-    The console script only exists after `pip install -e .`, and the very
-    first thing anyone hits is a command that is not on PATH. Fall back to the
-    module form, which works from a clone with nothing installed.
+    Installed as a plugin, the code sits next to a launcher that needs nothing
+    installed at all -- which is the only form that cannot break, and every
+    deployment failure this project has had came from assuming otherwise.
     """
+    import os
     import shutil
 
-    return "career-evidence" if shutil.which("career-evidence") else "python3 -m career_evidence"
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        launcher = Path(plugin_root) / "scripts" / "career-evidence"
+        if launcher.exists():
+            return f'python3 "{launcher}"'
+    if shutil.which("career-evidence"):
+        return "career-evidence"
+    bundled = Path(__file__).resolve().parent.parent / "scripts" / "career-evidence"
+    if bundled.exists():
+        return f'python3 "{bundled}"'
+    return "python3 -m career_evidence"
 
 
 AUTO = "auto"        # the driver can do this itself

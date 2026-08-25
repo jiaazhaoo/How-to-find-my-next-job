@@ -9,6 +9,21 @@ The user should never have to remember the order of anything. Run
 `career-evidence run`, do whatever it stops on, run it again. Repeat until
 it stops on something only they can supply.
 
+## First, work out how to call it
+
+The CLI may be on PATH, or it may be sitting in the plugin directory with
+nothing installed. Resolve it once and reuse that form for every command:
+
+```bash
+career-evidence --help >/dev/null 2>&1 \
+  && CE="career-evidence" \
+  || CE="python3 \"${CLAUDE_PLUGIN_ROOT:-.}/scripts/career-evidence\""
+```
+
+If `CLAUDE_PLUGIN_ROOT` is unset and you are inside a checkout, the launcher is
+at `./scripts/career-evidence`. Everything below writes `career-evidence`; use
+whichever form actually resolved.
+
 ## The loop
 
 ```bash

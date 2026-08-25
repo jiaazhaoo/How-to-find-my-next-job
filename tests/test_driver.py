@@ -169,19 +169,55 @@ class TestPackaging(unittest.TestCase):
         mod = __import__(module.rsplit(":", 1)[0], fromlist=[func])
         self.assertTrue(callable(getattr(mod, func)))
 
-    def test_the_driver_falls_back_when_the_script_is_absent(self):
-        """The first thing anyone hits is a command that is not on PATH."""
+    def test_the_driver_resolves_itself_in_priority_order(self):
+        """Every deployment failure here came from assuming the previous step
+        worked, so the invocation it prints must degrade rather than break."""
+        import os
         import shutil
         from career_evidence import driver
 
-        real = shutil.which
+        root = Path(__file__).resolve().parent.parent
+        real_which, real_env = shutil.which, os.environ.get("CLAUDE_PLUGIN_ROOT")
         try:
-            shutil.which = lambda name: None
-            self.assertEqual(driver.cli(), "python3 -m career_evidence")
+            # 1. installed as a plugin: the launcher ships alongside the code
+            os.environ["CLAUDE_PLUGIN_ROOT"] = str(root)
             shutil.which = lambda name: "/usr/local/bin/career-evidence"
+            self.assertIn("scripts/career-evidence", driver.cli())
+
+            # 2. no plugin, but on PATH
+            del os.environ["CLAUDE_PLUGIN_ROOT"]
             self.assertEqual(driver.cli(), "career-evidence")
+
+            # 3. neither: a plain checkout still has the launcher
+            shutil.which = lambda name: None
+            self.assertIn("scripts/career-evidence", driver.cli())
         finally:
-            shutil.which = real
+            shutil.which = real_which
+            os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
+            if real_env is not None:
+                os.environ["CLAUDE_PLUGIN_ROOT"] = real_env
+
+    def test_the_launcher_runs_with_nothing_installed(self):
+        import subprocess
+
+        launcher = Path(__file__).resolve().parent.parent / "scripts" / "career-evidence"
+        self.assertTrue(launcher.exists())
+        result = subprocess.run(["python3", str(launcher), "--help"],
+                                capture_output=True, text=True, cwd="/", timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("career-evidence", result.stdout)
+
+    def test_the_plugin_manifests_are_valid(self):
+        root = Path(__file__).resolve().parent.parent
+        manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text("utf-8"))
+        market = json.loads((root / ".claude-plugin" / "marketplace.json").read_text("utf-8"))
+        self.assertEqual(manifest["name"], "career-evidence")
+        self.assertIn("name", market["owner"])
+        self.assertTrue(market["plugins"])
+        for plugin in market["plugins"]:
+            self.assertTrue((root / plugin["source"]).is_dir())
+        # skills must sit where a plugin expects them
+        self.assertTrue((root / "skills" / "career-evidence" / "SKILL.md").exists())
 
 
 class TestProgress(unittest.TestCase):

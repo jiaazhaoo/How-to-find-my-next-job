@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Run the CLI straight from a checkout, with nothing installed.
+
+`pip install -e .` is a fine convenience and a terrible dependency. Every
+failure in this project's first real deployment came from that chain: the
+wrong directory, a stale distribution under the old name, build artefacts
+blocking a pull, a console script that never got created. None of it had
+anything to do with what the tool does.
+
+A plugin ships its own files, so the code is already on disk next to this
+launcher. Use it.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from career_evidence.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())
